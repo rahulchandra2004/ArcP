@@ -639,15 +639,15 @@ class RadialWindow(QWidget):
                         tx, ty = polar_to_cartesian(
                             (R_CONCENTRIC_INNER + r_out_current) / 2.0, mid_ang, xc, yc
                         )
-                        p.setFont(CyberpunkPalette.get_font(8, bold=is_sub_hover))
+                        p.setFont(CyberpunkPalette.get_ui_font(7.5, bold=is_sub_hover))
                         p.setPen(CyberpunkPalette.TEXT_PRIMARY if is_sub_hover else CyberpunkPalette.TEXT_MUTED)
                         p.drawText(
-                            QRectF(tx - 40, ty - 12, 80, 24),
-                            Qt.AlignmentFlag.AlignCenter,
+                            QRectF(tx - 46, ty - 18, 92, 36),
+                            Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
                             sub.name,
                         )
 
-        # 2. Inner Primary Ring (4 Slices: Top, Right, Bottom, Left)
+        # 2. Inner Primary Ring Shapes (4 Slices: Top, Right, Bottom, Left)
         for s_id in (1, 2, 3, 4):
             cfg = SLICE_ANGLES[s_id]
             slice_path = build_donut_sector_path(
@@ -662,15 +662,28 @@ class RadialWindow(QWidget):
             p.setPen(QPen(border_col, 2.2 if is_hover else 1.2))
             p.drawPath(slice_path)
 
-            # Slice Metadata Text
-            if plugin and s_id in plugin.slices:
+        # 3. Center Gravity Well Core (r < 65px) - drawn before text so text is never obscured
+        p.setBrush(QBrush(CyberpunkPalette.GRAVITY_WELL_BG))
+        is_gw_hover = self.hovered_zone == "GRAVITY_WELL"
+        gw_border = CyberpunkPalette.NEON_CYAN if is_gw_hover else CyberpunkPalette.ELECTRIC_INDIGO
+        p.setPen(QPen(gw_border, 2.5 if is_gw_hover else 1.5))
+        p.drawEllipse(QPointF(xc, yc), R_GRAVITY_WELL, R_GRAVITY_WELL)
+
+        # 4. Primary Slice Labels (drawn cleanly on top of all ring layers)
+        if plugin:
+            for s_id in (1, 2, 3, 4):
+                if s_id not in plugin.slices:
+                    continue
+                cfg = SLICE_ANGLES[s_id]
                 s_info = plugin.slices[s_id]
+                is_hover = (self.hovered_slice_id == s_id and self.hovered_zone == "PRIMARY")
+
                 # Label midpoint radius
-                mid_r = (R_PRIMARY_INNER + R_PRIMARY_OUTER) / 2.0
+                mid_r = 122.0
                 tx, ty = polar_to_cartesian(mid_r, cfg["center"], xc, yc)
 
                 # Draw Title
-                p.setFont(CyberpunkPalette.get_font(9, bold=True))
+                p.setFont(CyberpunkPalette.get_ui_font(9.0, bold=True))
                 p.setPen(CyberpunkPalette.NEON_CYAN if is_hover else CyberpunkPalette.TEXT_PRIMARY)
                 p.drawText(
                     QRectF(tx - 65, ty - 16, 130, 18),
@@ -678,24 +691,16 @@ class RadialWindow(QWidget):
                     s_info.name,
                 )
 
-                # Draw Subtitle
-                p.setFont(CyberpunkPalette.get_font(7, bold=False))
+                # Draw Subtitle with pixel-accurate QFontMetrics elision
+                p.setFont(CyberpunkPalette.get_ui_font(7.5, bold=False))
                 p.setPen(CyberpunkPalette.TEXT_MUTED)
-                desc = s_info.description
-                if len(desc) > 28:
-                    desc = desc[:26] + ".."
+                fm = p.fontMetrics()
+                elided_desc = fm.elidedText(s_info.description, Qt.TextElideMode.ElideRight, 130)
                 p.drawText(
                     QRectF(tx - 65, ty + 2, 130, 16),
                     Qt.AlignmentFlag.AlignCenter,
-                    desc,
+                    elided_desc,
                 )
-
-        # 3. Center Gravity Well (r < 65px)
-        p.setBrush(QBrush(CyberpunkPalette.GRAVITY_WELL_BG))
-        is_gw_hover = self.hovered_zone == "GRAVITY_WELL"
-        gw_border = CyberpunkPalette.NEON_CYAN if is_gw_hover else CyberpunkPalette.ELECTRIC_INDIGO
-        p.setPen(QPen(gw_border, 2.5 if is_gw_hover else 1.5))
-        p.drawEllipse(QPointF(xc, yc), R_GRAVITY_WELL, R_GRAVITY_WELL)
 
         # 4. Progress Arc Spinner (around Gravity Well)
         if self.anim_ctrl.spinner_angle > 0.0 or self.worker_pool.active_thread_count > 0:

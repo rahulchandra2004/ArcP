@@ -28,12 +28,12 @@ class CodeLogOpsPlugin(RadialAction):
         self.slices[1] = SliceConfig(
             slice_id=1,
             name="Secret Scrub",
-            description="Dehydrate AWS keys, JWTs, IPs, and high-entropy tokens to RAM vault",
+            description="Scrub API keys, JWTs & secrets to RAM",
         )
         self.slices[2] = SliceConfig(
             slice_id=2,
             name="Re-Hydrate / Triage",
-            description="Restore vault tokens or triage crash stack traces",
+            description="Restore secrets or triage crash logs",
             sub_slices=[
                 SubSliceConfig("rehydrate", "Re-Hydrate Tokens", "Scan and replace <ARCP_*> placeholders"),
                 SubSliceConfig("crash_triage", "Crash Triage", "Deduplicate logs & extract root stack trace"),
@@ -42,17 +42,17 @@ class CodeLogOpsPlugin(RadialAction):
         self.slices[3] = SliceConfig(
             slice_id=3,
             name="Schema / Type Gen",
-            description="AST/JSON parsing into Pydantic v2, TypeScript, or C++20",
+            description="JSON/AST to Pydantic, TS, or C++",
             sub_slices=[
-                SubSliceConfig("pydantic_v2", "Python Pydantic v2", "Generate typed Pydantic BaseModel"),
-                SubSliceConfig("typescript", "TypeScript Interface", "Generate TS interface types"),
                 SubSliceConfig("cpp20", "C++20 Struct", "Generate C++20 typed struct definitions"),
+                SubSliceConfig("typescript", "TypeScript Interface", "Generate TS interface types"),
+                SubSliceConfig("pydantic_v2", "Pydantic v2", "Generate typed Pydantic BaseModel"),
             ],
         )
         self.slices[4] = SliceConfig(
             slice_id=4,
             name="Auto-Dockerize",
-            description="Generate hardened, multi-stage non-root production Dockerfile",
+            description="Multi-stage hardened Dockerfile",
         )
 
     def execute(

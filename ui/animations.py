@@ -38,6 +38,13 @@ class CyberpunkPalette:
         font.setBold(bold)
         return font
 
+    @staticmethod
+    def get_ui_font(size: float = 8.0, bold: bool = False) -> QFont:
+        font = QFont("Segoe UI", int(size))
+        font.setStyleHint(QFont.StyleHint.SansSerif)
+        font.setBold(bold)
+        return font
+
 
 class AnimationController(QObject):
     """
