@@ -244,10 +244,10 @@ class GitOpsPlugin(RadialAction):
                     issues.append(("WARNING", f"{desc} at line {idx}", f"`{line.strip()[:60]}`"))
 
         passed = not any(sev == "CRITICAL" for sev, _, _ in issues)
-        status_banner = "✅ PRE-COMMIT PASSED" if passed else "🚫 PRE-COMMIT BLOCKED (CRITICAL ISSUES)"
+        status_banner = "[PASSED] PRE-COMMIT PASSED" if passed else "[BLOCKED] PRE-COMMIT BLOCKED (CRITICAL ISSUES)"
 
         md = [
-            "# 🛡️ ArcP Pre-Commit Gatekeeper Audit",
+            "# ArcP Pre-Commit Gatekeeper Audit",
             "",
             f"### Status: **{status_banner}**",
             f"- **Total Security/Quality Findings:** `{len(issues)}`",

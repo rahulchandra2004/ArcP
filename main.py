@@ -15,6 +15,16 @@ import time
 if os.environ.get("QT_QPA_PLATFORM") == "offscreen":
     del os.environ["QT_QPA_PLATFORM"]
 
+# Safe UTF-8 console output for Windows cp1252 environments
+if sys.platform == "win32":
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QApplication
 
@@ -41,7 +51,7 @@ def run_demo_sequence(window: RadialWindow) -> None:
         if step_index < len(modes):
             mode, title, sample_data = modes[step_index]
             window.set_active_mode(mode)
-            window.show_toast(f"🌟 Demo: {title} ({mode.value})")
+            window.show_toast(f"Demo: {title} ({mode.value})", icon_name="sparkle")
 
             # Simulate hover bloom on slice 1 or 4
             window.hovered_slice_id = 1
@@ -51,7 +61,7 @@ def run_demo_sequence(window: RadialWindow) -> None:
             step_index += 1
             QTimer.singleShot(2500, _next_demo_step)
         else:
-            window.show_toast("✅ Demo Showcase Complete • Ready for Drops")
+            window.show_toast("Demo Showcase Complete • Ready for Drops", icon_name="check")
             window.hovered_slice_id = None
             window.hovered_zone = "VOID"
             window.anim_ctrl.cancel_bloom()

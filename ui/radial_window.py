@@ -37,19 +37,12 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
 
+from ui.icons import IconRegistry
+
+
 def create_arcp_icon() -> QIcon:
-    """Generate high-contrast neon cyber ring QIcon in RAM."""
-    pix = QPixmap(64, 64)
-    pix.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pix)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-    p.setBrush(QBrush(QColor(10, 15, 29)))
-    p.setPen(QPen(QColor(0, 245, 212), 3.0))
-    p.drawEllipse(QPointF(32, 32), 26.0, 26.0)
-    p.setBrush(QBrush(QColor(0, 245, 212)))
-    p.drawEllipse(QPointF(32, 32), 8.0, 8.0)
-    p.end()
-    return QIcon(pix)
+    """Generate high-contrast neon cyber ring QIcon in RAM using IconRegistry."""
+    return IconRegistry.get_icon("arcp_logo")
 
 from core.clipboard_pipe import ClipboardPipe, ClipboardStreamReport
 from core.gravity_well import GravityWell
@@ -102,7 +95,7 @@ class RadialWindow(QWidget):
             self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)
             self.setStyleSheet("background-color: #0B0F19; color: #E2E8F0;")
         else:
-            flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+            flags = Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
             if start_collapsed:
                 flags |= Qt.WindowType.Tool
             self.setWindowFlags(flags)
@@ -156,6 +149,7 @@ class RadialWindow(QWidget):
 
         # Floating Toast State
         self._toast_message: Optional[str] = None
+        self._toast_icon: Optional[str] = None
         self._toast_timer = QTimer(self)
         self._toast_timer.setSingleShot(True)
         self._toast_timer.timeout.connect(self._hide_toast)
@@ -318,7 +312,7 @@ class RadialWindow(QWidget):
                 size_bytes=len(str(payload).encode("utf-8")),
             )
             self.telemetry.set_queue_count(self.gravity_well.count)
-            self.show_toast(f"📦 Queued in Gravity Well: {source_name} ({self.gravity_well.count} total)")
+            self.show_toast(f"Queued in Gravity Well: {source_name} ({self.gravity_well.count} total)", icon_name="package")
             event.acceptProposedAction()
             self.update()
             return
@@ -341,7 +335,7 @@ class RadialWindow(QWidget):
                 self.telemetry.set_queue_count(0)
                 # Execute batch sequentially or on primary
                 self._dispatch_action(payload, slice_id, sub_option)
-                self.show_toast(f"⚡ Batch Processing {len(batch)+1} items on Slice {slice_id}")
+                self.show_toast(f"Batch Processing {len(batch)+1} items on Slice {slice_id}", icon_name="zap")
             else:
                 self._dispatch_action(payload, slice_id, sub_option)
 
@@ -464,21 +458,23 @@ class RadialWindow(QWidget):
     @pyqtSlot(str)
     def _on_action_error(self, err_msg: str) -> None:
         self.anim_ctrl.stop_spinner()
-        self.show_toast(f"❌ Execution Error: {err_msg[:60]}")
+        self.show_toast(f"Execution Error: {err_msg[:60]}", icon_name="cross")
         self.update()
 
     @pyqtSlot(ClipboardStreamReport)
     def _on_clipboard_streamed(self, report: ClipboardStreamReport) -> None:
-        msg = f"⚡ {report.action} | {report.latency_ms:.1f}ms | {report.bytes_streamed:,}B -> Clipboard"
-        self.show_toast(msg)
+        msg = f"{report.action} | {report.latency_ms:.1f}ms | {report.bytes_streamed:,}B -> Clipboard"
+        self.show_toast(msg, icon_name="zap")
 
-    def show_toast(self, message: str) -> None:
+    def show_toast(self, message: str, icon_name: Optional[str] = None) -> None:
         self._toast_message = message
+        self._toast_icon = icon_name
         self._toast_timer.start(3500)
         self.update()
 
     def _hide_toast(self) -> None:
         self._toast_message = None
+        self._toast_icon = None
         self.update()
 
     def _refresh_hud_telemetry(self) -> None:
@@ -523,7 +519,7 @@ class RadialWindow(QWidget):
         plugin = self.plugins.get(self.active_mode)
 
         # 0. Ambient circular dark glass HUD base plate
-        p.setBrush(QBrush(QColor(10, 15, 29, 215)))
+        p.setBrush(QBrush(QColor(10, 15, 29, 240)))
         p.setPen(QPen(CyberpunkPalette.INDIGO_DIM, 1.5))
         p.drawEllipse(QPointF(xc, yc), 248.0, 248.0)
 
@@ -687,6 +683,13 @@ class RadialWindow(QWidget):
             p.setPen(QPen(CyberpunkPalette.NEON_CYAN, 1.5))
             p.drawRoundedRect(toast_rect, 6.0, 6.0)
 
+            text_rect = toast_rect
+            if self._toast_icon:
+                icon_pix = IconRegistry.get_pixmap(self._toast_icon, 20)
+                if not icon_pix.isNull():
+                    p.drawPixmap(int(toast_rect.left() + 10), int(toast_rect.top() + 6), icon_pix)
+                    text_rect = QRectF(toast_rect.left() + 34, toast_rect.top(), toast_rect.width() - 44, toast_rect.height())
+
             p.setFont(CyberpunkPalette.get_font(8, bold=True))
             p.setPen(CyberpunkPalette.TEXT_PRIMARY)
-            p.drawText(toast_rect, Qt.AlignmentFlag.AlignCenter, self._toast_message)
+            p.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, self._toast_message)

@@ -422,3 +422,36 @@ class TestCoreSystems:
         snap = tracker.snapshot()
         assert snap.secrets_blocked == 3
         assert snap.queue_count == 5
+
+
+# =============================================================================
+# 6. HD CYBER ICONS & ASSET REGISTRY TESTS
+# =============================================================================
+class TestIconRegistry:
+    def test_icon_rendering_and_caching(self):
+        from ui.icons import IconRegistry, EMBEDDED_SVGS
+        icon_names = ["zap", "package", "shield", "alert", "check", "cross", "search", "microscope", "lock", "sparkle", "arcp_logo"]
+
+        for name in icon_names:
+            # 1. Verify SVG source exists
+            svg = IconRegistry.get_svg(name)
+            assert "<svg" in svg
+            assert "</svg>" in svg
+
+            # 2. Verify QPixmap rendering
+            pix = IconRegistry.get_pixmap(name, size=32)
+            assert not pix.isNull()
+            assert pix.width() == 32
+            assert pix.height() == 32
+
+            # 3. Verify QIcon generation
+            qicon = IconRegistry.get_icon(name)
+            assert not qicon.isNull()
+
+            # 4. Verify base64 data URI
+            data_uri = IconRegistry.get_data_uri(name)
+            assert data_uri.startswith("data:image/svg+xml;base64,")
+
+            # 5. Verify ASCII tag for Windows cp1252 consoles
+            tag = IconRegistry.get_ascii_tag(name)
+            assert tag.startswith("[") and tag.endswith("]")

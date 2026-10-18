@@ -167,7 +167,7 @@ class MlOpsPlugin(RadialAction):
             threats.append(f"Non-standard or truncated pickle stream: {str(e)}")
 
         is_safe = len(threats) == 0
-        status_badge = "🛡️ PASSED / SECURE" if is_safe else "🚨 THREAT DETECTED / BLOCKED"
+        status_badge = "[SECURE] PASSED / SECURE" if is_safe else "[ALERT] THREAT DETECTED / BLOCKED"
 
         report = [
             "# ArcP Static Machine Learning Model Audit",
@@ -188,7 +188,7 @@ class MlOpsPlugin(RadialAction):
         if threats:
             report.extend([
                 "",
-                "### ⚠️ Security Threat Analysis",
+                "### [ALERT] Security Threat Analysis",
             ])
             for t in threats:
                 report.append(f"- {t}")
@@ -295,7 +295,7 @@ def quantize_model(model: torch.nn.Module, mode: str = "fp16") -> torch.nn.Modul
     return model
 """
 
-        return f"""# ⚡ ArcP Dynamic Weight Quantization Analysis
+        return f"""# ArcP Dynamic Weight Quantization Analysis
 
 ### In-Memory VRAM Footprint Projections
 | Precision | Footprint (MB) | Reduction (%) | Target Hardware |

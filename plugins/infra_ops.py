@@ -164,7 +164,7 @@ class InfraOpsPlugin(RadialAction):
 
         vuln_count = len(findings)
         md = [
-            "# 🛡️ ArcP Infrastructure Security Audit",
+            "# ArcP Infrastructure Security Audit",
             "",
             f"### Vulnerabilities Identified: `{vuln_count}`",
             "",

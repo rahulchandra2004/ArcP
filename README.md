@@ -80,7 +80,31 @@ When $H(X) > 4.2$ or when known credential patterns (AWS, GitHub, JWT, IPv4/6, E
 
 ---
 
-## 4. Zero-Disk Footprint Guarantee
+## 4. High-Definition Cyber Icon Engine & Asset Registry
+
+ArcP includes a custom, dedicated vector icon suite designed specifically for cyberpunk dark-glass HUD aesthetics, eliminating reliance on OS-dependent Unicode emoji fonts and preventing Windows `cp1252` encoding exceptions:
+
+* **Location:** `assets/icons/` & `ui/icons.py`
+* **Zero-Disk In-Memory Caching:** Built-in `IconRegistry` provides zero-disk RAM caching of high-resolution SVGs, multi-resolution `QIcon` objects (16 to 128px), and base64 SVG data URIs for self-contained HTML reports.
+* **Console Safety:** Automatically maps visual icons to safe ASCII bracketed tags (e.g. `[ZAP]`, `[QUEUE]`, `[SECURE]`, `[ALERT]`, `[OK]`, `[BLOCK]`, `[SEARCH]`, `[XRAY]`, `[VAULT]`, `[DEMO]`) for terminal environments.
+
+| Icon Asset | Visual Identity | Function & Pipeline Stage |
+|---|---|---|
+| `zap.svg` / `.png` | Electric Neon Cyan Lightning Bolt | Live Clipboard Stream & High-Velocity Batch Processing |
+| `package.svg` / `.png` | Isometric Cyber Cargo Crate | Gravity Well Batch Queue Buffer |
+| `shield.svg` / `.png` | Hexagonal Neon Aegis | Cryptographic Gatekeeper, Pre-Commit Audit, & Infrastructure Defense |
+| `alert.svg` / `.png` | Amber Hazard Warning Triangle | Security Threat Intercept & Crash Triage Alerts |
+| `check.svg` / `.png` | Emerald Geometric Checkmark | Policy Verification & Exploit Mitigation Pass |
+| `cross.svg` / `.png` | Crimson Neon Security Block | Exception Intercept & Policy Violation Blocker |
+| `search.svg` / `.png` | Digital Forensic Radar Loupe | Deep IOC Extraction & Network Endpoint Scanner |
+| `microscope.svg` / `.png` | Forensic Hexagonal X-Ray | Binary Header Struct Inspection (ELF / PE32+) |
+| `lock.svg` / `.png` | Quantum Cryptographic Padlock | Token Vault Reversible Redaction & Hash Manifest |
+| `sparkle.svg` / `.png` | Cyber Diamond 4-Point Star | Polymorphic Showcase & Demo Rotation |
+| `arcp_logo.svg` / `.png` | Concentric Radial HUD Badge | System Tray & Application Window Branding |
+
+---
+
+## 5. Zero-Disk Footprint Guarantee
 
 ArcP operates with a **strict 0-byte temporary file policy**:
 1. All image processing uses `PIL.Image.open(io.BytesIO)` and `cv2.imdecode` / `cv2.imencode`.
@@ -89,24 +113,32 @@ ArcP operates with a **strict 0-byte temporary file policy**:
 
 ---
 
-## 5. Quickstart & CLI Commands
+## 6. Quickstart & CLI Commands
 
 ### Installation
 ```bash
-git clone https://github.com/rahulpadamuttam/arcp.git
-cd arcp
+git clone https://github.com/rahulchandra2004/ArcP.git
+cd ArcP
 pip install -r requirements.txt
+pip install -e .
 ```
 
 ### CLI Launch Modes
 ```bash
-# 1. Interactive Bloomed Radial HUD
+# 1. Interactive Bloomed Radial HUD (Frameless 60-FPS Overlay)
 python main.py
+# or global CLI executable:
+arcp
 
-# 2. Daemon Mode (Minimized floating seed with Ctrl+Shift+Space & cursor shake detection)
+# 2. Standard Windowed Desktop Mode (With title bar and window frame)
+python main.py --windowed
+# or:
+run_arcp_windowed.bat
+
+# 3. Daemon Mode (Floating edge seed with Ctrl+Shift+Space & cursor shake detection)
 python main.py --daemon
 
-# 3. Automated Visual Showcase Demo (Cycles through all 7 polymorphic modes)
+# 4. Automated Visual Showcase Demo (Cycles through all 7 polymorphic modes)
 python main.py --demo
 ```
 

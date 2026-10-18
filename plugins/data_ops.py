@@ -17,6 +17,7 @@ import pandas as pd
 
 from core.mime_router import MimeMode
 from plugins.base_plugin import PipeResult, RadialAction, SliceConfig, SubSliceConfig
+from ui.icons import IconRegistry
 
 
 class DataOpsPlugin(RadialAction):
@@ -355,7 +356,7 @@ class DataOpsPlugin(RadialAction):
 </style>
 </head>
 <body>
-    <div class="hud-title">⚡ ARCP INSTANT EDA REPORT</div>
+    <div class="hud-title"><img src="{IconRegistry.get_data_uri('zap')}" width="22" height="22" style="vertical-align:middle;margin-right:8px;"/>ARCP INSTANT EDA REPORT</div>
     <div class="text-muted">Zero-disk in-memory statistical inspection • Generated in RAM</div>
 
     <div class="grid">

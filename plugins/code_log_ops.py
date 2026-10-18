@@ -176,7 +176,7 @@ class CodeLogOpsPlugin(RadialAction):
 
         # Markdown Report Generation
         md = [
-            "# 🚨 ArcP Crash Triage & Incident Analysis",
+            "# ArcP Crash Triage & Incident Analysis",
             "",
             "### Summary Metrics",
             f"- **Total Raw Log Lines:** `{total_lines:,}`",

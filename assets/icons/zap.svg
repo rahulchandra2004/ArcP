@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="zapGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F5D4"/>
+      <stop offset="100%" stop-color="#00BBF9"/>
+    </linearGradient>
+  </defs>
+  <polygon points="36,4 12,34 30,34 22,60 52,28 34,28" fill="#00F5D4" opacity="0.35"/>
+  <polygon points="36,6 16,33 32,33 25,56 48,30 32,30" fill="url(#zapGrad)" stroke="#E0FBFC" stroke-width="1.8" stroke-linejoin="round"/>
+  <polygon points="34,12 22,31 32,31 28,46 41,31 31,31" fill="#FFFFFF" opacity="0.85"/>
+</svg>

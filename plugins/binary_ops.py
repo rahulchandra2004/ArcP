@@ -128,9 +128,9 @@ class BinaryOpsPlugin(RadialAction):
                 entry_point = struct.unpack(f"{endian}I", b[24:28])[0]
 
             is_pie = e_type == 3  # ET_DYN is PIE (Position Independent Executable)
-            pie_str = "✅ ENABLED (ET_DYN)" if is_pie else "❌ DISABLED (ET_EXEC)"
+            pie_str = "[PASS] ENABLED (ET_DYN)" if is_pie else "[FAIL] DISABLED (ET_EXEC)"
 
-            return f"""# 🔬 ArcP Binary Header X-Ray: Linux ELF
+            return f"""# ArcP Binary Header X-Ray: Linux ELF
 
 ### Execution Specification
 - **Format:** ELF {'64-bit' if is_64 else '32-bit'} ({'Little' if ei_data == 1 else 'Big'} Endian)
@@ -142,7 +142,7 @@ class BinaryOpsPlugin(RadialAction):
 | Mitigation | Status | Detail |
 |---|---|---|
 | **PIE / ASLR** | {pie_str} | Position Independent Executable |
-| **NX / DEP** | 🛡️ ACTIVE | Non-Executable Stack default |
+| **NX / DEP** | [ACTIVE] ACTIVE | Non-Executable Stack default |
 """
 
         # 2. PE Inspection
@@ -180,7 +180,7 @@ class BinaryOpsPlugin(RadialAction):
                     dep = bool(dll_char & 0x0100)
                     cfg = bool(dll_char & 0x4000)
 
-            return f"""# 🔬 ArcP Binary Header X-Ray: Windows PE
+            return f"""# ArcP Binary Header X-Ray: Windows PE
 
 ### Execution Specification
 - **Format:** Portable Executable (PE32{' +' if machine == 0x8664 else ''})
@@ -192,9 +192,9 @@ class BinaryOpsPlugin(RadialAction):
 ### Security Mitigations
 | Mitigation | Status | Standard |
 |---|---|---|
-| **ASLR** (Dynamic Base) | {'✅ ENABLED' if aslr else '❌ DISABLED'} | Image randomization at load |
-| **DEP / NX** | {'✅ ENABLED' if dep else '❌ DISABLED'} | Hardware Data Execution Prevention |
-| **Control Flow Guard** | {'✅ ENABLED' if cfg else '⚠️ DISABLED'} | Exploit mitigation (CFG) |
+| **ASLR** (Dynamic Base) | {'[PASS] ENABLED' if aslr else '[FAIL] DISABLED'} | Image randomization at load |
+| **DEP / NX** | {'[PASS] ENABLED' if dep else '[FAIL] DISABLED'} | Hardware Data Execution Prevention |
+| **Control Flow Guard** | {'[PASS] ENABLED' if cfg else '[WARN] DISABLED'} | Exploit mitigation (CFG) |
 """
 
         return f"# Binary Header Unknown\nMagic Bytes: `{b[:8].hex()}`"
@@ -239,7 +239,7 @@ class BinaryOpsPlugin(RadialAction):
         ioc_total = len(urls) + len(ips) + len(paths) + len(reg_keys)
 
         md = [
-            "# 🔍 ArcP Strings & IOC X-Ray",
+            "# ArcP Strings & IOC X-Ray",
             "",
             f"- **Total Extracted Strings:** `{total_lines:,}`" if "total_lines" in locals() else f"- **Total Extracted Strings:** `{total_strings:,}`",
             f"- **Indicators of Compromise (IOCs):** `{ioc_total}`",
@@ -276,7 +276,7 @@ class BinaryOpsPlugin(RadialAction):
                 syms.add(s)
 
         md = [
-            "# 📦 ArcP Symbol & Dynamic Library Audit",
+            "# ArcP Symbol & Dynamic Library Audit",
             "",
             f"- **Referenced Shared Libraries:** `{len(libs)}`",
             f"- **Identified API Symbols:** `{len(syms)}`",
@@ -304,9 +304,9 @@ class BinaryOpsPlugin(RadialAction):
             entropy = -sum((cnt / length) * math.log2(cnt / length) for cnt in counts.values())
 
         is_packed = entropy > 7.2
-        status = "⚠️ PACKED / ENCRYPTED (High Entropy)" if is_packed else "🛡️ NORMAL / UNPACKED NATIVE CODE"
+        status = "[PACKED] PACKED / ENCRYPTED (High Entropy)" if is_packed else "[NORMAL] NORMAL / UNPACKED NATIVE CODE"
 
-        md = f"""# 🔐 ArcP Cryptographic Hash & Threat Intel Manifest
+        md = f"""# ArcP Cryptographic Hash & Threat Intel Manifest
 
 ### File Hash Signatures
 - **File Size:** `{length:,} bytes` ({round(length / (1024*1024), 2)} MB)
