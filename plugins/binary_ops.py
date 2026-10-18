@@ -5,6 +5,7 @@ Imported Library/Symbol Audit, and Threat-Intel Cryptographic Hash & Byte-Entrop
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import math
 import re
@@ -201,10 +202,100 @@ class BinaryOpsPlugin(RadialAction):
 | **Control Flow Guard** | {'[PASS] ENABLED' if cfg else '[WARN] DISABLED'} | Exploit mitigation (CFG) |
 """
 
-        return f"# Binary Header Unknown\nMagic Bytes: `{b[:8].hex()}`"
+        # 3. Source / Script / Text Byte Stream Inspection
+        return self._xray_script_or_text(b)
+
+    def _xray_script_or_text(self, b: bytes) -> str:
+        """Inspect source/script files or non-ELF/PE binaries."""
+        length = len(b)
+
+        # 1. Encoding & BOM
+        bom_desc = "None"
+        encoding = "UTF-8"
+        if b.startswith(b"\xef\xbb\xbf"):
+            bom_desc = "UTF-8 BOM (0xEF 0xBB 0xBF)"
+            encoding = "UTF-8-SIG"
+        elif b.startswith(b"\xff\xfe"):
+            bom_desc = "UTF-16 LE BOM (0xFF 0xFE)"
+            encoding = "UTF-16-LE"
+        elif b.startswith(b"\xfe\xff"):
+            bom_desc = "UTF-16 BE BOM (0xFE 0xFF)"
+            encoding = "UTF-16-BE"
+        else:
+            try:
+                b.decode("ascii")
+                encoding = "ASCII (7-bit clean)"
+            except UnicodeDecodeError:
+                try:
+                    b.decode("utf-8")
+                    encoding = "UTF-8 (No BOM)"
+                except UnicodeDecodeError:
+                    encoding = "Binary / ISO-8859-1"
+
+        # 2. Line Endings
+        crlf_count = b.count(b"\r\n")
+        lf_count = b.count(b"\n") - crlf_count
+        if crlf_count > 0 and lf_count == 0:
+            line_endings = f"CRLF (Windows standard, {crlf_count:,} lines)"
+        elif lf_count > 0 and crlf_count == 0:
+            line_endings = f"LF (Unix standard, {lf_count:,} lines)"
+        elif crlf_count > 0 and lf_count > 0:
+            line_endings = f"Mixed (CRLF: {crlf_count:,}, LF: {lf_count:,})"
+        else:
+            line_endings = "Single line / Non-terminated"
+
+        # 3. Shebang Line
+        shebang = "None detected"
+        if b.startswith(b"#!"):
+            first_line = b.splitlines()[0] if b.splitlines() else b
+            try:
+                shebang = first_line.decode("utf-8", errors="replace").strip()
+            except Exception:
+                shebang = repr(first_line)
+
+        # 4. Hex Dump of first 64 bytes
+        first_64 = b[:64]
+        hex_lines = []
+        for offset in range(0, len(first_64), 16):
+            chunk = first_64[offset : offset + 16]
+            hex_part1 = " ".join(f"{byte:02x}" for byte in chunk[:8])
+            hex_part2 = " ".join(f"{byte:02x}" for byte in chunk[8:])
+            hex_str = f"{hex_part1:<23}  {hex_part2:<23}".rstrip()
+            ascii_str = "".join(chr(byte) if 32 <= byte <= 126 else "." for byte in chunk)
+            hex_lines.append(f"{offset:08x}:  {hex_str:<48}  |{ascii_str}|")
+        hex_dump_md = "\n".join(hex_lines) if hex_lines else "00000000:  <empty payload>"
+
+        # 5. Shannon Entropy
+        entropy = 0.0
+        if length > 0:
+            counts = Counter(b)
+            entropy = -sum((cnt / length) * math.log2(cnt / length) for cnt in counts.values())
+
+        if entropy < 5.2:
+            entropy_eval = "Text / Source Code Distribution (Clean)"
+        elif entropy < 7.0:
+            entropy_eval = "Structured Binary or Compressed Script"
+        else:
+            entropy_eval = "High Entropy / Packed / Encrypted"
+
+        return f"""# ArcP File Byte & Runtime Header X-Ray
+
+### Execution & Encoding Specification
+- **Payload Format:** Script / Source / Text Stream
+- **Exact Size:** `{length:,} bytes` ({round(length / 1024.0, 2)} KB)
+- **Character Encoding:** `{encoding}` (BOM: `{bom_desc}`)
+- **Line Terminations:** `{line_endings}`
+- **Runtime Shebang:** `{shebang}`
+- **Shannon Byte Entropy:** `{entropy:.4f} / 8.0000` ({entropy_eval})
+
+### First 64 Bytes Canonical Hex Dump
+```text
+{hex_dump_md}
+```
+"""
 
     def _extract_strings_and_iocs(self, b: bytes) -> Tuple[str, int]:
-        """Extract printable strings and categorize threat intel IOCs."""
+        """Extract printable strings and categorize threat intel IOCs & secrets."""
         # Find printable ASCII (length >= 5)
         ascii_matches = [s.decode("ascii", errors="ignore") for s in re.findall(b"[ -~]{5,}", b)]
         # Find UTF-16 strings
@@ -218,11 +309,19 @@ class BinaryOpsPlugin(RadialAction):
         ips = []
         paths = []
         reg_keys = []
+        secrets = []
 
         url_re = re.compile(r"https?://[a-zA-Z0-9_\-\./:\?\#\[\]@!$&'\(\)\*\+,;=%]+")
         ip_re = re.compile(r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b")
         path_re = re.compile(r"(?:[a-zA-Z]:\\[A-Za-z0-9_\.\\]+|/(?:etc|usr|bin|var|tmp|home)/[A-Za-z0-9_\./]+)")
         reg_re = re.compile(r"(?:HKEY_[A-Z_]+|HKLM\\|HKCU\\)[A-Za-z0-9_\\]+")
+
+        secret_patterns = [
+            (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "AWS Access Key"),
+            (re.compile(r"-----BEGIN [A-Z ]+ PRIVATE KEY-----"), "Private Key Header"),
+            (re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{36,255}\b"), "GitHub Token"),
+            (re.compile(r"(?:api[_-]?key|secret|token|password|bearer)[ \t]*[=:][ \t]*['\"][a-zA-Z0-9_\-\.]{8,}['\"]", re.IGNORECASE), "Credential Token"),
+        ]
 
         for s in all_strings:
             for u in url_re.findall(s):
@@ -234,19 +333,23 @@ class BinaryOpsPlugin(RadialAction):
                 paths.append(p)
             for r in reg_re.findall(s):
                 reg_keys.append(r)
+            for pat, desc in secret_patterns:
+                for match in pat.findall(s):
+                    secrets.append(f"{desc}: `{match[:32]}...`" if len(match) > 32 else f"{desc}: `{match}`")
 
         urls = sorted(set(urls))[:15]
         ips = sorted(set(ips))[:15]
         paths = sorted(set(paths))[:15]
         reg_keys = sorted(set(reg_keys))[:15]
+        secrets = sorted(set(secrets))[:15]
 
-        ioc_total = len(urls) + len(ips) + len(paths) + len(reg_keys)
+        ioc_total = len(urls) + len(ips) + len(paths) + len(reg_keys) + len(secrets)
 
         md = [
             "# ArcP Strings & IOC X-Ray",
             "",
-            f"- **Total Extracted Strings:** `{total_lines:,}`" if "total_lines" in locals() else f"- **Total Extracted Strings:** `{total_strings:,}`",
-            f"- **Indicators of Compromise (IOCs):** `{ioc_total}`",
+            f"- **Total Extracted Strings:** `{total_strings:,}`",
+            f"- **Indicators of Compromise & Secrets (IOCs):** `{ioc_total}`",
             "",
             "### Embedded URLs & Network Endpoints",
         ]
@@ -261,10 +364,24 @@ class BinaryOpsPlugin(RadialAction):
         md.extend(["", "### Registry Keys"])
         md.extend([f"- `{r}`" for r in reg_keys] if reg_keys else ["- *No registry keys detected.*"])
 
+        md.extend(["", "### Embedded Secrets & Credentials"])
+        md.extend([f"- {s}" for s in secrets] if secrets else ["- *No embedded credentials or API keys detected.*"])
+
         return "\n".join(md), ioc_total
 
     def _audit_symbols_and_libs(self, b: bytes) -> str:
-        """Extract imported shared libraries and function symbols."""
+        """Inspect imported symbols: Python AST parser for source files, or binary string audit."""
+        # 1. Try parsing payload as Python source code
+        try:
+            text = b.decode("utf-8", errors="replace")
+            if text.startswith("\ufeff"):
+                text = text[1:]
+            tree = ast.parse(text)
+            return self._audit_python_ast(text, tree)
+        except Exception:
+            pass
+
+        # 2. Fallback to native binary ELF/PE symbol extraction
         ascii_strings = [s.decode("ascii", errors="ignore") for s in re.findall(rb"[a-zA-Z0-9_.-]{4,}", b)]
 
         libs = set()
@@ -291,6 +408,145 @@ class BinaryOpsPlugin(RadialAction):
 
         md.extend(["", "### Critical System & API Symbols"])
         md.extend([f"- `{sym}`" for sym in sorted(syms)[:30]] if syms else ["- *No common exported API symbols isolated.*"])
+
+        return "\n".join(md)
+
+    def _audit_python_ast(self, text: str, tree: ast.AST) -> str:
+        """Generate comprehensive Python AST Symbol & Dependency Audit."""
+        imports: List[str] = []
+        from_imports: List[str] = []
+        classes: List[Dict[str, Any]] = []
+        functions: List[Dict[str, Any]] = []
+        constants: List[Tuple[str, int]] = []
+        native_bindings: List[str] = []
+
+        class ASTCollector(ast.NodeVisitor):
+            def visit_Import(self, node: ast.Import) -> None:
+                for alias in node.names:
+                    name = alias.name
+                    if alias.asname:
+                        name += f" as {alias.asname}"
+                    imports.append(f"`{name}` (L{node.lineno})")
+                    if alias.name in ("ctypes", "cffi", "win32api", "win32con", "winrt", "cython"):
+                        native_bindings.append(f"Native C/C++ Binding: `import {alias.name}` at line {node.lineno}")
+                self.generic_visit(node)
+
+            def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+                mod = node.module or ""
+                items = [a.name if not a.asname else f"{a.name} as {a.asname}" for a in node.names]
+                from_imports.append(f"`from {mod} import {', '.join(items)}` (L{node.lineno})")
+                if mod in ("ctypes", "cffi", "win32api", "win32con", "winrt", "subprocess"):
+                    native_bindings.append(f"Foreign C/C++ Interface: `from {mod} import {', '.join(items)}` at line {node.lineno}")
+                self.generic_visit(node)
+
+            def visit_ClassDef(self, node: ast.ClassDef) -> None:
+                bases = [ast.unparse(b) for b in node.bases] if hasattr(ast, "unparse") else []
+                methods_count = len([n for n in node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))])
+                classes.append({
+                    "name": node.name,
+                    "bases": ", ".join(bases) if bases else "object",
+                    "methods": methods_count,
+                    "lineno": node.lineno,
+                })
+                self.generic_visit(node)
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+                self._record_fn(node, is_async=False)
+                self.generic_visit(node)
+
+            def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+                self._record_fn(node, is_async=True)
+                self.generic_visit(node)
+
+            def _record_fn(self, node: ast.FunctionDef | ast.AsyncFunctionDef, is_async: bool) -> None:
+                args_strs = []
+                for arg in node.args.args:
+                    s = arg.arg
+                    if arg.annotation and hasattr(ast, "unparse"):
+                        s += f": {ast.unparse(arg.annotation)}"
+                    args_strs.append(s)
+                if node.args.vararg:
+                    args_strs.append(f"*{node.args.vararg.arg}")
+                if node.args.kwarg:
+                    args_strs.append(f"**{node.args.kwarg.arg}")
+
+                ret_str = ""
+                if getattr(node, "returns", None) and hasattr(ast, "unparse"):
+                    ret_str = f" -> {ast.unparse(node.returns)}"
+
+                prefix = "async def" if is_async else "def"
+                sig = f"{prefix} {node.name}({', '.join(args_strs)}){ret_str}"
+                functions.append({
+                    "sig": sig,
+                    "lineno": node.lineno,
+                })
+
+            def visit_Assign(self, node: ast.Assign) -> None:
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id.isupper():
+                        constants.append((target.id, node.lineno))
+                self.generic_visit(node)
+
+            def visit_Call(self, node: ast.Call) -> None:
+                if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+                    if node.func.value.id in ("ctypes", "cffi", "cdll", "windll"):
+                        native_bindings.append(f"Direct Foreign Invocation: `{node.func.value.id}.{node.func.attr}()` at line {node.lineno}")
+                self.generic_visit(node)
+
+        ASTCollector().visit(tree)
+
+        lines_count = len(text.splitlines())
+        total_imports = len(imports) + len(from_imports)
+
+        md = [
+            "# ArcP Python AST Symbol & Dependency Audit",
+            "",
+            "### Module Structural Metrics",
+            f"- **Lines of Source Code:** `{lines_count:,}`",
+            f"- **Imported Modules & Packages:** `{total_imports}`",
+            f"- **Class Declarations:** `{len(classes)}`",
+            f"- **Function & Method Declarations:** `{len(functions)}`",
+            f"- **Module Constants:** `{len(constants)}`",
+            f"- **Native Foreign Interfaces:** `{len(native_bindings)}`",
+            "",
+            "### Module Imports & Dependencies",
+        ]
+
+        if imports or from_imports:
+            md.extend([f"- {imp}" for imp in imports[:15]])
+            md.extend([f"- {f_imp}" for f_imp in from_imports[:15]])
+        else:
+            md.append("- *No top-level module imports declared.*")
+
+        md.extend(["", "### Class Structures & Inheritance"])
+        if classes:
+            md.append("| Class Name | Inherits From | Methods | Line |")
+            md.append("|---|---|---|---|")
+            for c in classes[:15]:
+                md.append(f"| `{c['name']}` | `{c['bases']}` | `{c['methods']}` | L{c['lineno']} |")
+        else:
+            md.append("- *No class definitions in module.*")
+
+        md.extend(["", "### Functions & Methods"])
+        if functions:
+            for fn in functions[:20]:
+                md.append(f"- `L{fn['lineno']}`: `{fn['sig']}`")
+            if len(functions) > 20:
+                md.append(f"- *... and {len(functions) - 20} additional functions.*")
+        else:
+            md.append("- *No function definitions found.*")
+
+        md.extend(["", "### Module-Level Constants"])
+        if constants:
+            md.extend([f"- `{c[0]}` (line {c[1]})" for c in constants[:15]])
+        else:
+            md.append("- *No uppercase module constants declared.*")
+
+        md.extend(["", "### Native & Foreign C-Bindings Audit"])
+        if native_bindings:
+            md.extend([f"- [WARN] {nb}" for nb in native_bindings[:10]])
+        else:
+            md.append("- [PASS] **No native ctypes / cffi / foreign binary bindings detected.**")
 
         return "\n".join(md)
 

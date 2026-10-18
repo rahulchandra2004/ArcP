@@ -163,6 +163,7 @@ class RadialWindow(QWidget):
 
         # 5. UI State
         self.is_collapsed: bool = start_collapsed
+        self.manual_mode_override: bool = False
         self.hovered_slice_id: Optional[int] = None
         self.hovered_sub_slice_idx: Optional[int] = None
         self.hovered_zone: str = "VOID"
@@ -270,13 +271,38 @@ class RadialWindow(QWidget):
         self._dock_to_screen_edge()
         self.update()
 
-    def set_active_mode(self, mode: MimeMode) -> None:
+    def set_active_mode(self, mode: MimeMode, manual: bool = False) -> None:
         """Switch polymorphic mode."""
+        if manual:
+            self.manual_mode_override = True
         self.active_mode = mode
         self.update()
 
+    def _reclassify_active_content(self) -> None:
+        """Re-sniff clipboard payload and auto-shift mode if applicable."""
+        cb = QApplication.clipboard()
+        mime = cb.mimeData() if cb else None
+        if not mime:
+            return
+        payload = None
+        if mime.hasUrls() and mime.urls():
+            payload = mime.urls()[0].toLocalFile()
+        elif mime.hasImage() and not mime.imageData().isNull():
+            payload = mime.imageData()
+        elif cb and not cb.image().isNull():
+            payload = cb.image()
+        elif mime.hasText() and mime.text().strip():
+            payload = mime.text()
+
+        if payload is not None and payload != "ArcP Sample Payload":
+            detected_mode, _ = MimeRouter.classify_payload(payload)
+            self.active_mode = detected_mode
+
     def _on_clipboard_data_changed(self) -> None:
         """Dynamically detect and morph radial mode when user copies new content to clipboard."""
+        if self.manual_mode_override:
+            return
+
         cb = QApplication.clipboard()
         mime = cb.mimeData() if cb else None
         if not mime:
@@ -295,7 +321,7 @@ class RadialWindow(QWidget):
         if payload is not None and payload != "ArcP Sample Payload":
             detected_mode, desc = MimeRouter.classify_payload(payload)
             if detected_mode != self.active_mode:
-                self.set_active_mode(detected_mode)
+                self.set_active_mode(detected_mode, manual=False)
                 self.show_toast(f"Mode Auto-Shift: {detected_mode.value}", icon_name="sparkle")
 
     # -------------------------------------------------------------------------
@@ -303,8 +329,9 @@ class RadialWindow(QWidget):
     # -------------------------------------------------------------------------
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         mime = event.mimeData()
-        detected_mode, desc = MimeRouter.classify_payload(mime)
-        self.active_mode = detected_mode
+        if not self.manual_mode_override:
+            detected_mode, desc = MimeRouter.classify_payload(mime)
+            self.active_mode = detected_mode
 
         if self.is_collapsed:
             pos = self.mapToGlobal(event.position().toPoint())
@@ -414,101 +441,16 @@ class RadialWindow(QWidget):
                 self.show_toast(f"Cleared {cleared} queued items")
                 self.update()
             else:
-                # Cycle mode on center core click
+                # Cycle mode on center core click (manual selection)
                 idx = ORDERED_MODES.index(self.active_mode) if self.active_mode in ORDERED_MODES else 0
                 new_mode = ORDERED_MODES[(idx + 1) % len(ORDERED_MODES)]
-                self.set_active_mode(new_mode)
+                self.set_active_mode(new_mode, manual=True)
                 plugin = self.plugins.get(new_mode)
                 name = plugin.name if plugin else new_mode.value
                 self.show_toast(f"Mode: {new_mode.value} • {name}", icon_name="sparkle")
             return
 
-    def wheelEvent(self, event: QWheelEvent) -> None:
-        """Cycle polymorphic modes with mouse scroll wheel."""
-        delta = event.angleDelta().y()
-        if delta == 0:
-            delta = event.angleDelta().x()
-        idx = ORDERED_MODES.index(self.active_mode) if self.active_mode in ORDERED_MODES else 0
-        if delta > 0:
-            new_mode = ORDERED_MODES[(idx - 1) % len(ORDERED_MODES)]
-        else:
-            new_mode = ORDERED_MODES[(idx + 1) % len(ORDERED_MODES)]
-        self.set_active_mode(new_mode)
-        plugin = self.plugins.get(new_mode)
-        name = plugin.name if plugin else new_mode.value
-        self.show_toast(f"Mode: {new_mode.value} • {name}", icon_name="sparkle")
-        event.accept()
-
-    def keyPressEvent(self, event: QKeyEvent) -> None:
-        """Switch modes with number keys 1-7, Tab, or close with Escape."""
-        key = event.key()
-        if key == Qt.Key.Key_Tab:
-            idx = ORDERED_MODES.index(self.active_mode) if self.active_mode in ORDERED_MODES else 0
-            new_mode = ORDERED_MODES[(idx + 1) % len(ORDERED_MODES)]
-            self.set_active_mode(new_mode)
-            self.show_toast(f"Mode: {new_mode.value}", icon_name="sparkle")
-        elif Qt.Key.Key_1 <= key <= Qt.Key.Key_7:
-            idx = key - Qt.Key.Key_1
-            if 0 <= idx < len(ORDERED_MODES):
-                self.set_active_mode(ORDERED_MODES[idx])
-                self.show_toast(f"Mode: {ORDERED_MODES[idx].value}", icon_name="sparkle")
-        elif key == Qt.Key.Key_Escape:
-            self.collapse_to_seed()
-        else:
-            super().keyPressEvent(event)
-
-    def _show_context_menu(self, global_pos: QPoint) -> None:
-        """Sleek Cyberpunk Context Menu with instant mode switching."""
-        menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: #0F172A;
-                color: #F8FAFC;
-                border: 1px solid #00F5D4;
-                border-radius: 6px;
-                padding: 4px;
-                font-family: 'Segoe UI';
-                font-size: 12px;
-            }
-            QMenu::item {
-                padding: 6px 20px;
-                border-radius: 4px;
-            }
-            QMenu::item:selected {
-                background-color: #1E293B;
-                color: #00F5D4;
-            }
-            QMenu::separator {
-                height: 1px;
-                background-color: #334155;
-                margin: 4px 8px;
-            }
-        """)
-
-        mode_options = [
-            (MimeMode.IMAGE, "Image Ops (JPG, PNG, WebP, OCR)"),
-            (MimeMode.DATASET, "Dataset Ops (CSV, Parquet, SQL)"),
-            (MimeMode.CODE_LOG, "Code & Log Ops (Secrets, Docker)"),
-            (MimeMode.ML_MODEL, "ML Model Ops (ONNX, Tensors)"),
-            (MimeMode.INFRA, "Infra Ops (Docker, K8s, Terraform)"),
-            (MimeMode.BINARY, "Binary Ops (ELF, PE, Hex X-Ray)"),
-            (MimeMode.GIT_PATCH, "Git Patch Ops (Diffs, Commits)"),
-        ]
-
-        for mode, title in mode_options:
-            prefix = "[Active] " if mode == self.active_mode else "         "
-            action = menu.addAction(f"{prefix}{title}")
-            action.triggered.connect(lambda checked, m=mode: self.set_active_mode(m))
-
-        menu.addSeparator()
-        collapse_action = menu.addAction("Minimize to Floating Seed")
-        collapse_action.triggered.connect(self.collapse_to_seed)
-
-        close_action = menu.addAction("Exit ArcP")
-        close_action.triggered.connect(QApplication.instance().quit)
-
-        menu.exec(global_pos)
-
+        # Check click on primary slices (1, 2, 3, 4) or concentric sub-slices
         if self.hovered_slice_id in (1, 2, 3, 4):
             slice_id = self.hovered_slice_id
             sub_option = None
@@ -544,11 +486,12 @@ class RadialWindow(QWidget):
                 elif mime.hasText() and mime.text().strip():
                     payload = mime.text()
 
-            # Auto-classify clipboard payload if detected
-            if payload is not None and payload != "ArcP Sample Payload":
-                detected_mode, _ = MimeRouter.classify_payload(payload)
-                if detected_mode != self.active_mode:
-                    self.set_active_mode(detected_mode)
+            # Auto-classify clipboard payload ONLY if manual_mode_override is False!
+            if not self.manual_mode_override:
+                if payload is not None and payload != "ArcP Sample Payload":
+                    detected_mode, _ = MimeRouter.classify_payload(payload)
+                    if detected_mode != self.active_mode:
+                        self.set_active_mode(detected_mode, manual=False)
 
             # Priority 3: Fallback mode-appropriate sample if clipboard is completely blank
             if payload is None:
@@ -569,12 +512,122 @@ class RadialWindow(QWidget):
                     payload = "FROM python:3.11-slim\nUSER root\nEXPOSE 22\nCMD [\"python\", \"app.py\"]"
                 elif self.active_mode == MimeMode.GIT_PATCH:
                     payload = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,1 +1,1 @@\n-debug=True\n+debug=False\n"
+                elif self.active_mode == MimeMode.BINARY:
+                    payload = b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 40
+                elif self.active_mode == MimeMode.ML_MODEL:
+                    payload = '{"model_format": "onnx", "input_shape": [1, 3, 224, 224], "layers": 50}'
                 else:
                     payload = "2026-10-18 12:00:00 ERROR [auth] AWS_KEY=AKIAIOSFODNN7EXAMPLE login failed for root"
                 self.show_toast(f"No clipboard item • Executing {self.active_mode.value} sample", icon_name="info")
 
             self._dispatch_action(payload, slice_id, sub_option)
             self.update()
+
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        """Cycle polymorphic modes with mouse scroll wheel."""
+        delta = event.angleDelta().y()
+        if delta == 0:
+            delta = event.angleDelta().x()
+        idx = ORDERED_MODES.index(self.active_mode) if self.active_mode in ORDERED_MODES else 0
+        if delta > 0:
+            new_mode = ORDERED_MODES[(idx - 1) % len(ORDERED_MODES)]
+        else:
+            new_mode = ORDERED_MODES[(idx + 1) % len(ORDERED_MODES)]
+        self.set_active_mode(new_mode, manual=True)
+        plugin = self.plugins.get(new_mode)
+        name = plugin.name if plugin else new_mode.value
+        self.show_toast(f"Mode: {new_mode.value} • {name}", icon_name="sparkle")
+        event.accept()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Switch modes with number keys 1-7, Tab, A/0 to auto-detect, or close with Escape."""
+        key = event.key()
+        if key == Qt.Key.Key_Tab:
+            idx = ORDERED_MODES.index(self.active_mode) if self.active_mode in ORDERED_MODES else 0
+            new_mode = ORDERED_MODES[(idx + 1) % len(ORDERED_MODES)]
+            self.set_active_mode(new_mode, manual=True)
+            self.show_toast(f"Mode: {new_mode.value}", icon_name="sparkle")
+        elif Qt.Key.Key_1 <= key <= Qt.Key.Key_7:
+            idx = key - Qt.Key.Key_1
+            if 0 <= idx < len(ORDERED_MODES):
+                self.set_active_mode(ORDERED_MODES[idx], manual=True)
+                self.show_toast(f"Mode: {ORDERED_MODES[idx].value}", icon_name="sparkle")
+        elif key in (Qt.Key.Key_A, Qt.Key.Key_0):
+            self.manual_mode_override = False
+            self._reclassify_active_content()
+            self.show_toast("Mode: Auto-Detect (MIME Router)", icon_name="sparkle")
+            self.update()
+        elif key == Qt.Key.Key_Escape:
+            self.collapse_to_seed()
+        else:
+            super().keyPressEvent(event)
+
+    def _show_context_menu(self, global_pos: QPoint) -> None:
+        """Sleek Cyberpunk Context Menu with instant mode switching."""
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #0F172A;
+                color: #F8FAFC;
+                border: 1px solid #00F5D4;
+                border-radius: 6px;
+                padding: 4px;
+                font-family: 'Segoe UI';
+                font-size: 12px;
+            }
+            QMenu::item {
+                padding: 6px 20px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #1E293B;
+                color: #00F5D4;
+            }
+            QMenu::separator {
+                height: 1px;
+                background-color: #334155;
+                margin: 4px 8px;
+            }
+        """)
+
+        # Option 0: Auto-Detect Mode (MIME Router)
+        auto_prefix = "[Active] " if not self.manual_mode_override else "         "
+        auto_action = menu.addAction(f"{auto_prefix}Auto-Detect Mode (MIME Router)")
+
+        def _enable_auto():
+            self.manual_mode_override = False
+            self._reclassify_active_content()
+            self.show_toast("Mode: Auto-Detect (MIME Router)", icon_name="sparkle")
+            self.update()
+
+        auto_action.triggered.connect(_enable_auto)
+
+        menu.addSeparator()
+
+        mode_options = [
+            (MimeMode.IMAGE, "Image Ops (JPG, PNG, WebP, OCR)"),
+            (MimeMode.DATASET, "Dataset Ops (CSV, Parquet, SQL)"),
+            (MimeMode.CODE_LOG, "Code & Log Ops (Secrets, Docker)"),
+            (MimeMode.ML_MODEL, "ML Model Ops (ONNX, Tensors)"),
+            (MimeMode.INFRA, "Infra Ops (Docker, K8s, Terraform)"),
+            (MimeMode.BINARY, "Binary Ops (ELF, PE, Hex X-Ray)"),
+            (MimeMode.GIT_PATCH, "Git Patch Ops (Diffs, Commits)"),
+        ]
+
+        for mode, title in mode_options:
+            is_cur = self.manual_mode_override and (mode == self.active_mode)
+            prefix = "[Active] " if is_cur else "         "
+            action = menu.addAction(f"{prefix}{title}")
+            action.triggered.connect(lambda checked, m=mode: self.set_active_mode(m, manual=True))
+
+        menu.addSeparator()
+        collapse_action = menu.addAction("Minimize to Floating Seed")
+        collapse_action.triggered.connect(self.collapse_to_seed)
+
+        close_action = menu.addAction("Exit ArcP")
+        close_action.triggered.connect(QApplication.instance().quit)
+
+        menu.exec(global_pos)
 
     def _update_hover_coordinates(self, x: float, y: float) -> None:
         xc = self.width() / 2.0
@@ -898,14 +951,26 @@ class RadialWindow(QWidget):
             )
 
         # 4. Mode Badge inside Solid Pill Background (#1E293B fill, #00F5D4 text)
-        pill_rect = QRectF(xc - 38.0, yc - 44.0, 76.0, 18.0)
-        p.setBrush(QBrush(QColor("#1E293B")))
-        p.setPen(QPen(QColor("#334155"), 1.0))
-        p.drawRoundedRect(pill_rect, 9.0, 9.0)
+        if self.manual_mode_override:
+            pill_w = 104.0
+            pill_rect = QRectF(xc - pill_w / 2.0, yc - 44.0, pill_w, 18.0)
+            p.setBrush(QBrush(QColor("#1E293B")))
+            p.setPen(QPen(QColor("#00F5D4"), 1.5))
+            p.drawRoundedRect(pill_rect, 9.0, 9.0)
 
-        p.setFont(CyberpunkPalette.get_ui_font(7.5, bold=True))
-        p.setPen(QColor("#00F5D4"))
-        p.drawText(pill_rect, Qt.AlignmentFlag.AlignCenter, self.active_mode.value)
+            p.setFont(CyberpunkPalette.get_ui_font(6.8, bold=True))
+            p.setPen(QColor("#00F5D4"))
+            p.drawText(pill_rect, Qt.AlignmentFlag.AlignCenter, f"{self.active_mode.value} • PINNED")
+        else:
+            pill_w = 76.0
+            pill_rect = QRectF(xc - pill_w / 2.0, yc - 44.0, pill_w, 18.0)
+            p.setBrush(QBrush(QColor("#1E293B")))
+            p.setPen(QPen(QColor("#334155"), 1.0))
+            p.drawRoundedRect(pill_rect, 9.0, 9.0)
+
+            p.setFont(CyberpunkPalette.get_ui_font(7.5, bold=True))
+            p.setPen(QColor("#00F5D4"))
+            p.drawText(pill_rect, Qt.AlignmentFlag.AlignCenter, self.active_mode.value)
 
         # 5. 7 Solid 4px Pager Dots directly below pill (#00F5D4 active, #334155 inactive)
         dot_y = yc - 18.0

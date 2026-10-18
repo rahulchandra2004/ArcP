@@ -404,6 +404,70 @@ class TestPlugins:
         assert "SHA-256" in res_hashes.data
         assert "Entropy Score" in res_hashes.data
 
+    def test_binary_ops_with_python_source(self):
+        plugin = BinaryOpsPlugin()
+        py_source = (
+            "#!/usr/bin/env python3\n"
+            "# ArcP Sample Source Script\n"
+            "import os\n"
+            "import sys as system\n"
+            "from PyQt6.QtWidgets import QWidget\n"
+            "import ctypes\n"
+            "\n"
+            "MAX_BUFFER_SIZE = 1048576\n"
+            "API_KEY = 'AKIAIOSFODNN7EXAMPLE'\n"
+            "\n"
+            "class PipelineEngine(QWidget):\n"
+            "    def process(self, stream_id: str) -> bool:\n"
+            "        return True\n"
+            "\n"
+            "def run_worker(task_id: int):\n"
+            "    url = 'https://api.arcp.local/v1/telemetry'\n"
+            "    return task_id\n"
+        )
+
+        # Slice 1: Script Header X-Ray (Shebang, Encoding, Line endings, Hex Dump, Entropy)
+        res_xray = plugin.execute(py_source, slice_id=1)
+        assert "ArcP File Byte & Runtime Header X-Ray" in res_xray.data
+        assert "Runtime Shebang:" in res_xray.data
+        assert "#!/usr/bin/env python3" in res_xray.data
+        assert "Canonical Hex Dump" in res_xray.data
+
+        # Slice 2: IOC Extractor with secrets and URLs
+        res_iocs = plugin.execute(py_source, slice_id=2)
+        assert "ArcP Strings & IOC X-Ray" in res_iocs.data
+        assert "https://api.arcp.local/v1/telemetry" in res_iocs.data
+        assert "AWS Access Key" in res_iocs.data
+
+        # Slice 3: Python AST Symbol & Dependency Audit
+        res_ast = plugin.execute(py_source, slice_id=3)
+        assert "ArcP Python AST Symbol & Dependency Audit" in res_ast.data
+        assert "PipelineEngine" in res_ast.data
+        assert "run_worker" in res_ast.data
+        assert "MAX_BUFFER_SIZE" in res_ast.data
+        assert "ctypes" in res_ast.data
+
+        # Slice 4: Cryptographic Hashes & Entropy
+        res_hash = plugin.execute(py_source, slice_id=4)
+        assert "Cryptographic Hash & Threat Intel Manifest" in res_hash.data
+        assert "MD5:" in res_hash.data
+        assert "SHA-256:" in res_hash.data
+
+    def test_radial_window_manual_mode_override(self):
+        from ui.radial_window import RadialWindow
+        window = RadialWindow(start_collapsed=True)
+        assert window.manual_mode_override is False
+
+        # Manual mode switch pins mode
+        window.set_active_mode(MimeMode.BINARY, manual=True)
+        assert window.active_mode == MimeMode.BINARY
+        assert window.manual_mode_override is True
+
+        # Re-enabling auto mode resets override
+        window.manual_mode_override = False
+        assert window.manual_mode_override is False
+        window.close()
+
     def test_git_ops_plugin(self):
         vault = TokenVault()
         plugin = GitOpsPlugin(vault)
