@@ -220,7 +220,10 @@ class ImageOpsPlugin(RadialAction):
 
     def _ocr_tensor_extract(self, raw_bytes: bytes) -> str:
         """Extract OCR text if pytesseract exists, else morphological table & tensor summary."""
-        pil_img = Image.open(io.BytesIO(raw_bytes))
+        try:
+            pil_img = Image.open(io.BytesIO(raw_bytes))
+        except Exception as e:
+            return f"# ArcP Visual Tensor & OCR Extraction\n\n- **Status:** Unidentified image payload ({len(raw_bytes)} bytes)\n- **Detail:** Expected valid image binary (PNG, JPEG, WEBP, BMP). Received non-image stream: `{raw_bytes[:40]}`"
         width, height = pil_img.size
         mode = pil_img.mode
 
@@ -291,7 +294,10 @@ class ImageOpsPlugin(RadialAction):
 
     def _webp_ultra_compress(self, raw_bytes: bytes, sub_option: str) -> Tuple[Any, str]:
         """Compress in-memory to WebP, Quantized PNG, or Base64 Data URI."""
-        pil_img = Image.open(io.BytesIO(raw_bytes))
+        try:
+            pil_img = Image.open(io.BytesIO(raw_bytes))
+        except Exception:
+            return raw_bytes, "application/octet-stream"
 
         if sub_option == "webp_lossless":
             out_buf = io.BytesIO()
