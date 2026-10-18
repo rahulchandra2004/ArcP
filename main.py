@@ -87,12 +87,15 @@ def main() -> int:
             Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
         )
 
+    from ui.radial_window import RadialWindow, create_arcp_icon
+
     # Initialize QApplication
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
     app.setApplicationName("ArcP")
     app.setApplicationDisplayName("ArcP Radial HUD")
+    app.setWindowIcon(create_arcp_icon())
 
     # Graceful Ctrl+C handling
     signal.signal(signal.SIGINT, signal.SIG_DFL)

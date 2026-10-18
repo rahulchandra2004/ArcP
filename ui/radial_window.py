@@ -26,13 +26,30 @@ from PyQt6.QtGui import (
     QDragMoveEvent,
     QDropEvent,
     QFont,
+    QIcon,
     QMouseEvent,
     QPaintEvent,
     QPainter,
     QPainterPath,
     QPen,
+    QPixmap,
 )
-from PyQt6.QtWidgets import QApplication, QWidget
+from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
+
+
+def create_arcp_icon() -> QIcon:
+    """Generate high-contrast neon cyber ring QIcon in RAM."""
+    pix = QPixmap(64, 64)
+    pix.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    p.setBrush(QBrush(QColor(10, 15, 29)))
+    p.setPen(QPen(QColor(0, 245, 212), 3.0))
+    p.drawEllipse(QPointF(32, 32), 26.0, 26.0)
+    p.setBrush(QBrush(QColor(0, 245, 212)))
+    p.drawEllipse(QPointF(32, 32), 8.0, 8.0)
+    p.end()
+    return QIcon(pix)
 
 from core.clipboard_pipe import ClipboardPipe, ClipboardStreamReport
 from core.gravity_well import GravityWell
@@ -75,15 +92,23 @@ class RadialWindow(QWidget):
     def __init__(self, start_collapsed: bool = False) -> None:
         super().__init__(None)
 
+        self.setWindowTitle("ArcP - Autonomous Radial Context Pipeline")
+        self.icon = create_arcp_icon()
+        self.setWindowIcon(self.icon)
+
         # 1. Window Flags and Attributes
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-        )
+        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+        if start_collapsed:
+            flags |= Qt.WindowType.Tool
+        self.setWindowFlags(flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAcceptDrops(True)
         self.setMouseTracking(True)
+
+        # 1b. System Tray Integration
+        self._tray_icon: Optional[QSystemTrayIcon] = None
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self._setup_system_tray()
 
         # 2. Core Subsystems
         self.vault = TokenVault(ttl=600.0)
@@ -158,6 +183,38 @@ class RadialWindow(QWidget):
             geo = screen.availableGeometry()
             # Dock to right edge middle
             self.move(geo.x() + geo.width() - self.COLLAPSED_SIZE - 20, geo.y() + geo.height() // 2)
+
+    def _setup_system_tray(self) -> None:
+        """Create Windows system tray icon and context menu."""
+        tray_menu = QMenu()
+        act_show = tray_menu.addAction("Show ArcP HUD")
+        act_show.triggered.connect(lambda: self.expand_hud())
+        act_clear = tray_menu.addAction("Clear Gravity Well Queue")
+        act_clear.triggered.connect(self._clear_queue_from_tray)
+        tray_menu.addSeparator()
+        act_quit = tray_menu.addAction("Exit ArcP")
+        app_inst = QApplication.instance()
+        if app_inst:
+            act_quit.triggered.connect(app_inst.quit)
+
+        self._tray_icon = QSystemTrayIcon(self.icon, self)
+        self._tray_icon.setToolTip("ArcP - Autonomous Radial Context Pipeline")
+        self._tray_icon.setContextMenu(tray_menu)
+        self._tray_icon.activated.connect(self._on_tray_activated)
+        self._tray_icon.show()
+
+    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            if self.is_collapsed or not self.isVisible():
+                self.expand_hud()
+            else:
+                self.raise_()
+                self.activateWindow()
+
+    def _clear_queue_from_tray(self) -> None:
+        count = self.gravity_well.clear()
+        self.telemetry.set_queue_count(0)
+        self.show_toast(f"Cleared {count} queued items")
 
     # -------------------------------------------------------------------------
     # State Transitions: Collapsed (Floating Seed) <-> Expanded (Bloomed HUD)
@@ -458,6 +515,11 @@ class RadialWindow(QWidget):
         w, h = self.width(), self.height()
         xc, yc = w / 2.0, h / 2.0
         plugin = self.plugins.get(self.active_mode)
+
+        # 0. Ambient circular dark glass HUD base plate
+        p.setBrush(QBrush(QColor(10, 15, 29, 215)))
+        p.setPen(QPen(CyberpunkPalette.INDIGO_DIM, 1.5))
+        p.drawEllipse(QPointF(xc, yc), 248.0, 248.0)
 
         # 1. Outer Concentric Sub-Slices (if bloomed)
         bloom_factor = self.anim_ctrl.bloom_factor
