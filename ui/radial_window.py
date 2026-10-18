@@ -138,7 +138,8 @@ class RadialWindow(QWidget):
 
         self.cursor_watcher = CursorWatcher(self)
         self.cursor_watcher.summon_requested.connect(self.summon_under_cursor)
-        self.cursor_watcher.start()
+        # Defer cursor watcher & global hotkey hook slightly so HUD paints instantly
+        QTimer.singleShot(100, self.cursor_watcher.start)
 
         # 5. UI State
         self.is_collapsed: bool = start_collapsed

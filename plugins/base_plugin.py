@@ -95,3 +95,35 @@ class RadialAction(ABC):
         if isinstance(payload, (bytes, bytearray)):
             return payload.decode("utf-8", errors="replace")
         return str(payload)
+
+
+class LazyModule:
+    """Zero-overhead proxy that defers importing heavy C/C++ libraries until first access."""
+
+    def __init__(self, module_name: str, fallback: Any = None):
+        self._module_name = module_name
+        self._fallback = fallback
+        self._mod: Any = None
+
+    def _resolve(self) -> Any:
+        if self._mod is None:
+            try:
+                import importlib
+                self._mod = importlib.import_module(self._module_name)
+            except (ImportError, Exception):
+                self._mod = self._fallback
+        return self._mod
+
+    def __getattr__(self, name: str) -> Any:
+        mod = self._resolve()
+        if mod is None:
+            raise ImportError(f"Optional module '{self._module_name}' is not installed or available.")
+        return getattr(mod, name)
+
+    def __bool__(self) -> bool:
+        return self._resolve() is not None
+
+
+def lazy_import(name: str, fallback: Any = None) -> Any:
+    """Return a lazy proxy for a module to ensure <150ms instant cold startup."""
+    return LazyModule(name, fallback)

@@ -12,21 +12,20 @@ import re
 import time
 from typing import Any, Dict, Optional, Tuple
 
-import numpy as np
 from PIL import Image
 
-try:
-    import cv2
-except ImportError:
-    cv2 = None  # type: ignore
-
-try:
-    import pytesseract
-except ImportError:
-    pytesseract = None  # type: ignore
-
 from core.mime_router import MimeMode
-from plugins.base_plugin import PipeResult, RadialAction, SliceConfig, SubSliceConfig
+from plugins.base_plugin import (
+    PipeResult,
+    RadialAction,
+    SliceConfig,
+    SubSliceConfig,
+    lazy_import,
+)
+
+cv2 = lazy_import("cv2")
+np = lazy_import("numpy")
+pytesseract = lazy_import("pytesseract")
 
 
 class ImageOpsPlugin(RadialAction):
@@ -36,13 +35,17 @@ class ImageOpsPlugin(RadialAction):
         super().__init__(MimeMode.IMAGE, "Image Operations")
         self._init_slices()
         self._face_cascade = None
-        if cv2 is not None:
+
+    @property
+    def face_cascade(self) -> Any:
+        if self._face_cascade is None and cv2:
             try:
                 cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
                 if os.path.exists(cascade_path):
                     self._face_cascade = cv2.CascadeClassifier(cascade_path)
             except Exception:
                 self._face_cascade = None
+        return self._face_cascade
 
     def _init_slices(self) -> None:
         self.slices[1] = SliceConfig(
@@ -154,9 +157,10 @@ class ImageOpsPlugin(RadialAction):
         redactions = 0
 
         # 1. Face Detection
-        if self._face_cascade is not None:
+        cascade = self.face_cascade
+        if cascade is not None:
             try:
-                faces = self._face_cascade.detectMultiScale(
+                faces = cascade.detectMultiScale(
                     gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
                 )
                 for (x, y, fw, fh) in faces:

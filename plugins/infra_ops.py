@@ -9,10 +9,16 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-import yaml
-
 from core.mime_router import MimeMode
-from plugins.base_plugin import PipeResult, RadialAction, SliceConfig, SubSliceConfig
+from plugins.base_plugin import (
+    PipeResult,
+    RadialAction,
+    SliceConfig,
+    SubSliceConfig,
+    lazy_import,
+)
+
+yaml = lazy_import("yaml")
 
 
 class InfraOpsPlugin(RadialAction):

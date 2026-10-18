@@ -44,11 +44,12 @@ class CursorWatcher(QObject):
         self._poll_timer.timeout.connect(self._sample_cursor)
 
         self._hotkey_registered = False
-        self._setup_global_hotkey()
 
     def start(self) -> None:
-        """Begin polling cursor positions."""
+        """Begin polling cursor positions and register global hotkey hook."""
         self._poll_timer.start()
+        if not self._hotkey_registered:
+            self._setup_global_hotkey()
 
     def stop(self) -> None:
         """Stop polling cursor positions."""

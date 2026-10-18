@@ -12,12 +12,17 @@ import sqlite3
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
-import pandas as pd
-
 from core.mime_router import MimeMode
-from plugins.base_plugin import PipeResult, RadialAction, SliceConfig, SubSliceConfig
-from ui.icons import IconRegistry
+from plugins.base_plugin import (
+    PipeResult,
+    RadialAction,
+    SliceConfig,
+    SubSliceConfig,
+    lazy_import,
+)
+
+pd = lazy_import("pandas")
+np = lazy_import("numpy")
 
 
 class DataOpsPlugin(RadialAction):
@@ -248,6 +253,8 @@ class DataOpsPlugin(RadialAction):
 
     def _generate_eda_html(self, df: pd.DataFrame) -> str:
         """Generate a self-contained, dark-mode glassmorphism HTML EDA report."""
+        from ui.icons import IconRegistry
+
         rows_count, cols_count = df.shape
         mem_usage_kb = round(df.memory_usage(deep=True).sum() / 1024, 1)
         duplicate_rows = int(df.duplicated().sum())
