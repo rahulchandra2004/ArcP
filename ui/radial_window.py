@@ -146,10 +146,10 @@ class RadialWindow(QWidget):
     def _center_on_screen(self) -> None:
         screen = QApplication.primaryScreen()
         if screen:
-            geo = screen.availableGeometry()
+            center = screen.availableGeometry().center()
             self.move(
-                geo.x() + (geo.width() - self.EXPANDED_SIZE) // 2,
-                geo.y() + (geo.height() - self.EXPANDED_SIZE) // 2,
+                center.x() - self.EXPANDED_SIZE // 2,
+                center.y() - self.EXPANDED_SIZE // 2,
             )
 
     def _dock_to_screen_edge(self) -> None:
@@ -169,10 +169,16 @@ class RadialWindow(QWidget):
 
     def expand_hud(self, center_pos: Optional[QPoint] = None) -> None:
         """Expand from floating seed into full 520x520 HUD."""
-        target_pos = center_pos or self.geometry().center()
+        if center_pos is None:
+            screen = QApplication.primaryScreen()
+            if screen:
+                center_pos = screen.availableGeometry().center()
+            else:
+                center_pos = self.geometry().center()
+
         self.is_collapsed = False
         self.resize(self.EXPANDED_SIZE, self.EXPANDED_SIZE)
-        self.move(target_pos.x() - self.EXPANDED_SIZE // 2, target_pos.y() - self.EXPANDED_SIZE // 2)
+        self.move(center_pos.x() - self.EXPANDED_SIZE // 2, center_pos.y() - self.EXPANDED_SIZE // 2)
         self.show()
         self.raise_()
         self.activateWindow()

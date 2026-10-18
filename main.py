@@ -6,9 +6,14 @@ Author: Rahul Chandra Padamuttam (RCP)
 from __future__ import annotations
 
 import argparse
+import os
 import signal
 import sys
 import time
+
+# Ensure QT_QPA_PLATFORM offscreen is NEVER set outside of pytest
+if os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+    del os.environ["QT_QPA_PLATFORM"]
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QApplication
@@ -52,7 +57,9 @@ def run_demo_sequence(window: RadialWindow) -> None:
             window.anim_ctrl.cancel_bloom()
 
     # Expand HUD first, then start showcase
-    window.expand_hud()
+    screen = QApplication.primaryScreen()
+    center_pos = screen.availableGeometry().center() if screen else None
+    window.expand_hud(center_pos)
     QTimer.singleShot(800, _next_demo_step)
 
 
@@ -80,7 +87,10 @@ def main() -> int:
             Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
         )
 
-    app = QApplication(sys.argv)
+    # Initialize QApplication
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
     app.setApplicationName("ArcP")
     app.setApplicationDisplayName("ArcP Radial HUD")
 
@@ -90,10 +100,23 @@ def main() -> int:
     sigint_timer.start(500)
     sigint_timer.timeout.connect(lambda: None)
 
-    # Initialize window
+    # Determine start state
     start_collapsed = args.daemon and not args.demo
     window = RadialWindow(start_collapsed=start_collapsed)
+
+    # Force into EXPANDED state centered on primary screen when not in daemon mode
+    if not start_collapsed:
+        screen = QApplication.primaryScreen()
+        center_pos = screen.availableGeometry().center() if screen else None
+        window.expand_hud(center_pos)
+    else:
+        window.collapse_to_seed()
+
     window.show()
+    window.raise_()
+    window.activateWindow()
+
+    print(f"ArcP HUD launched at ({window.x()}, {window.y()})", flush=True)
 
     if args.demo:
         run_demo_sequence(window)

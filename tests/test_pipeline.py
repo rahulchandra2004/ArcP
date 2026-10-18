@@ -10,8 +10,9 @@ import os
 import sys
 import pytest
 
-# Ensure offscreen Qt platform for test runners
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# Ensure offscreen Qt platform is used ONLY when running inside pytest test runner
+if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
+    os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 from PyQt6.QtWidgets import QApplication
 
