@@ -238,6 +238,33 @@ class IconRegistry:
         return pix
 
     @classmethod
+    def get_tinted_pixmap(cls, name: str, size: int = 20, color: Optional[QColor] = None) -> QPixmap:
+        """Render and cache a vector icon tinted uniformly with a solid opaque color."""
+        color_tag = color.name() if color else "orig"
+        cache_key = f"{name}_{size}_{color_tag}"
+        if cache_key in cls._pixmap_cache:
+            return cls._pixmap_cache[cache_key]
+
+        base_pix = cls.get_pixmap(name, size=size)
+        if color is None:
+            return base_pix
+
+        image = QImage(size, size, QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(Qt.GlobalColor.transparent)
+
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        painter.drawPixmap(0, 0, base_pix)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(image.rect(), color)
+        painter.end()
+
+        tinted_pix = QPixmap.fromImage(image)
+        cls._pixmap_cache[cache_key] = tinted_pix
+        return tinted_pix
+
+    @classmethod
     def get_icon(cls, name: str) -> QIcon:
         """Create and cache multi-resolution QIcon."""
         if name in cls._icon_cache:

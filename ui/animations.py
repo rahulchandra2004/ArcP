@@ -11,25 +11,34 @@ from PyQt6.QtGui import QColor, QFont
 
 
 class CyberpunkPalette:
-    """Design System & Cyberpunk Color Palette for ArcP HUD."""
-    # Dark glassmorphic background
-    SLATE_BG = QColor(15, 23, 42, 220)
-    SLATE_HOVER = QColor(30, 41, 59, 245)
-    SLATE_ACTIVE = QColor(51, 65, 85, 250)
-    GRAVITY_WELL_BG = QColor(10, 15, 29, 235)
+    """100% Solid Matte Industrial Dark UI Palette for ArcP HUD (Raycast/Linear inspired)."""
+    # Solid matte background and surface tones (Alpha = 255, ZERO background bleed)
+    GRAVITY_WELL_BG = QColor("#090D16")  # Solid Obsidian Center
+    SLATE_BG = QColor("#111827")         # Primary Slice Idle: Solid Matte Slate
+    SLATE_HOVER = QColor("#1E293B")      # Primary Slice Hover: Solid Elevated Slate
+    SLATE_ACTIVE = QColor("#1E1B4B")     # Active/Pressed State
+    CONCENTRIC_BG = QColor("#0F172A")    # Outer Concentric Idle: Solid Charcoal
+    CONCENTRIC_HOVER = QColor("#1E1B4B") # Outer Concentric Hover: Solid Indigo-Slate
+    PILL_BG = QColor("#1E293B")          # Center Mode Pill Fill
 
-    # Neon accents
-    NEON_CYAN = QColor(0, 245, 212, 255)
+    # Crisp architectural borders
+    BORDER_SUBTLE = QColor("#1E293B")
+    BORDER_MUTED = QColor("#334155")
+
+    # High-contrast solid accents
+    NEON_CYAN = QColor("#00F5D4")
     CYAN_GLOW = QColor(0, 245, 212, 60)
-    ELECTRIC_INDIGO = QColor(99, 102, 241, 255)
+    ELECTRIC_INDIGO = QColor("#6366F1")
     INDIGO_DIM = QColor(99, 102, 241, 90)
-    AMBER_ALERT = QColor(251, 191, 36, 255)
-    ROSE_DANGER = QColor(244, 63, 94, 255)
+    AMBER_ALERT = QColor("#FBBF24")
+    ROSE_DANGER = QColor("#F43F5E")
+    WHITE = QColor("#FFFFFF")
 
-    # Monospace typography
-    TEXT_PRIMARY = QColor(248, 250, 252, 255)
-    TEXT_MUTED = QColor(148, 163, 184, 220)
-    TEXT_ACCENT = QColor(0, 245, 212, 255)
+    # High-legibility typography
+    TEXT_PRIMARY = QColor("#F8FAFC")  # Crisp pure white
+    TEXT_MUTED = QColor("#94A3B8")    # Muted slate
+    TEXT_HOVER = QColor("#E2E8F0")    # High-contrast hover slate
+    TEXT_ACCENT = QColor("#00F5D4")
 
     @staticmethod
     def get_font(size: int = 9, bold: bool = False) -> QFont:
@@ -39,10 +48,14 @@ class CyberpunkPalette:
         return font
 
     @staticmethod
-    def get_ui_font(size: float = 8.0, bold: bool = False) -> QFont:
-        font = QFont("Segoe UI", int(size))
+    def get_ui_font(size: float = 8.0, bold: bool = False, weight: Optional[QFont.Weight] = None) -> QFont:
+        font = QFont("Segoe UI")
+        font.setPointSizeF(size)
         font.setStyleHint(QFont.StyleHint.SansSerif)
-        font.setBold(bold)
+        if weight is not None:
+            font.setWeight(weight)
+        else:
+            font.setBold(bold)
         return font
 
 

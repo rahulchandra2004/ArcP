@@ -29,6 +29,7 @@ class SliceConfig:
     name: str
     description: str
     sub_slices: List[SubSliceConfig] = field(default_factory=list)
+    icon: Optional[str] = None
 
 
 @dataclass

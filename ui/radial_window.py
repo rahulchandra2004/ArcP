@@ -26,6 +26,7 @@ from PyQt6.QtGui import (
     QDragMoveEvent,
     QDropEvent,
     QFont,
+    QFontMetrics,
     QIcon,
     QKeyEvent,
     QMouseEvent,
@@ -34,6 +35,7 @@ from PyQt6.QtGui import (
     QPainterPath,
     QPen,
     QPixmap,
+    QRadialGradient,
     QWheelEvent,
 )
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
@@ -78,6 +80,7 @@ from ui.geometry import (
     R_GRAVITY_WELL,
     R_PRIMARY_INNER,
     R_PRIMARY_OUTER,
+    R_TEXT_PRIMARY,
     SLICE_ANGLES,
     build_donut_sector_path,
     polar_to_cartesian,
@@ -698,16 +701,31 @@ class RadialWindow(QWidget):
         p.setPen(Qt.PenStyle.NoPen)
         p.drawEllipse(QPointF(xc, yc), 5.0, 5.0)
 
+    def _resolve_slice_icon(self, s_info: Any, s_id: int) -> str:
+        """Resolve vector icon key for a primary slice."""
+        if getattr(s_info, "icon", None):
+            return s_info.icon
+        name_l = getattr(s_info, "name", "").lower()
+        if any(k in name_l for k in ("scrub", "secret", "blur", "protect", "pii", "sanitiz", "conflict", "hash")):
+            return "shield"
+        if any(k in name_l for k in ("docker", "package", "compress", "compose", "gguf")):
+            return "package"
+        if any(k in name_l for k in ("triage", "inspect", "diff", "search", "sql", "ocr", "re-hydrate")):
+            return "search"
+        if any(k in name_l for k in ("vram", "entropy", "packed", "quant")):
+            return "microscope"
+        if any(k in name_l for k in ("eda", "commit", "zap", "quick", "speed", "torch")):
+            return "zap"
+        if any(k in name_l for k in ("env", "lock", "stash", "vault")):
+            return "lock"
+        fallback_map = {1: "shield", 2: "search", 3: "sparkle", 4: "package"}
+        return fallback_map.get(s_id, "sparkle")
+
     def _paint_expanded_hud(self, p: QPainter) -> None:
-        """Render complete 520x520 HUD."""
+        """Render complete 520x520 100% Solid Matte Industrial Dark HUD."""
         w, h = self.width(), self.height()
         xc, yc = w / 2.0, h / 2.0
         plugin = self.plugins.get(self.active_mode)
-
-        # 0. Ambient circular dark glass HUD base plate
-        p.setBrush(QBrush(QColor(10, 15, 29, 240)))
-        p.setPen(QPen(CyberpunkPalette.INDIGO_DIM, 1.5))
-        p.drawEllipse(QPointF(xc, yc), 248.0, 248.0)
 
         # 1. Outer Concentric Sub-Slices (if bloomed)
         bloom_factor = self.anim_ctrl.bloom_factor
@@ -723,35 +741,41 @@ class RadialWindow(QWidget):
 
                 for i, sub in enumerate(slice_cfg.sub_slices):
                     sub_start = (parent_ang["start"] + i * sub_span) % 360.0
-                    sub_path = build_donut_sector_path(xc, yc, R_CONCENTRIC_INNER, r_out_current, sub_start, sub_span - 2.0)
+                    sub_path = build_donut_sector_path(
+                        xc, yc, R_CONCENTRIC_INNER, r_out_current, sub_start, sub_span - 2.0
+                    )
 
                     is_sub_hover = (
                         self.hovered_zone == "CONCENTRIC"
                         and self.hovered_slice_id == bloom_slice
                         and self.hovered_sub_slice_idx == i
                     )
-                    fill_color = CyberpunkPalette.SLATE_ACTIVE if is_sub_hover else CyberpunkPalette.SLATE_BG
-                    border_color = CyberpunkPalette.NEON_CYAN if is_sub_hover else CyberpunkPalette.INDIGO_DIM
+                    fill_color = QColor("#1E1B4B") if is_sub_hover else QColor("#0F172A")
+                    border_color = QColor("#6366F1") if is_sub_hover else QColor("#334155")
+                    border_width = 2.0 if is_sub_hover else 1.5
 
                     p.setBrush(QBrush(fill_color))
-                    p.setPen(QPen(border_color, 1.8 if is_sub_hover else 1.0))
+                    p.setPen(QPen(border_color, border_width))
                     p.drawPath(sub_path)
 
-                    # Text for sub-slice
+                    # Text for sub-slice with strict clip path
                     if bloom_factor > 0.5:
                         mid_ang = (sub_start + (sub_span - 2.0) / 2.0) % 360.0
-                        tx, ty = polar_to_cartesian(
+                        scx, scy = polar_to_cartesian(
                             (R_CONCENTRIC_INNER + r_out_current) / 2.0, mid_ang, xc, yc
                         )
+                        p.save()
+                        p.setClipPath(sub_path)
                         p.setFont(CyberpunkPalette.get_ui_font(7.5, bold=is_sub_hover))
-                        p.setPen(CyberpunkPalette.TEXT_PRIMARY if is_sub_hover else CyberpunkPalette.TEXT_MUTED)
+                        p.setPen(QColor("#FFFFFF") if is_sub_hover else QColor("#94A3B8"))
                         p.drawText(
-                            QRectF(tx - 46, ty - 18, 92, 36),
+                            QRectF(scx - 38.0, scy - 16.0, 76.0, 32.0),
                             Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
                             sub.name,
                         )
+                        p.restore()
 
-        # 2. Inner Primary Ring Shapes (4 Slices: Top, Right, Bottom, Left)
+        # 2. Inner Primary Ring Slices (Top, Right, Bottom, Left)
         for s_id in (1, 2, 3, 4):
             cfg = SLICE_ANGLES[s_id]
             slice_path = build_donut_sector_path(
@@ -759,99 +783,160 @@ class RadialWindow(QWidget):
             )
 
             is_hover = (self.hovered_slice_id == s_id and self.hovered_zone == "PRIMARY")
-            fill_col = CyberpunkPalette.SLATE_HOVER if is_hover else CyberpunkPalette.SLATE_BG
-            border_col = CyberpunkPalette.NEON_CYAN if is_hover else CyberpunkPalette.ELECTRIC_INDIGO
+            is_lr = s_id in (2, 4)
+            # Left/Right wedges are horizontal: center at 120px for balanced margins from inner/outer walls
+            r_centroid = 120.0 if is_lr else R_TEXT_PRIMARY
+            cx, cy = polar_to_cartesian(r_centroid, cfg["center"], xc, yc)
 
-            p.setBrush(QBrush(fill_col))
-            p.setPen(QPen(border_col, 2.2 if is_hover else 1.2))
+            if is_hover:
+                # Solid elevated slate with subtle inner radial highlight
+                grad = QRadialGradient(QPointF(cx, cy), 90.0)
+                grad.setColorAt(0.0, QColor("#283548"))
+                grad.setColorAt(1.0, QColor("#1E293B"))
+                p.setBrush(QBrush(grad))
+                p.setPen(QPen(QColor("#00F5D4"), 2.0))
+            else:
+                p.setBrush(QBrush(QColor("#111827")))
+                p.setPen(QPen(QColor("#1E293B"), 1.5))
+
             p.drawPath(slice_path)
 
-        # 3. Center Gravity Well Core (r < 65px) - drawn before text so text is never obscured
-        p.setBrush(QBrush(CyberpunkPalette.GRAVITY_WELL_BG))
-        is_gw_hover = self.hovered_zone == "GRAVITY_WELL"
-        gw_border = CyberpunkPalette.NEON_CYAN if is_gw_hover else CyberpunkPalette.ELECTRIC_INDIGO
-        p.setPen(QPen(gw_border, 2.5 if is_gw_hover else 1.5))
+            # Sub-Menu Indicator on outer arc if slice has concentric sub-slices
+            has_subs = bool(plugin and s_id in plugin.slices and len(plugin.slices[s_id].sub_slices) > 0)
+            if has_subs:
+                dot_r = R_PRIMARY_OUTER - 7.0  # 168.0px
+                dot_color = QColor("#00F5D4") if is_hover else QColor("#475569")
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(dot_color))
+                for dot_offset in (-4.0, 0.0, 4.0):
+                    d_ang = (cfg["center"] + dot_offset) % 360.0
+                    dx, dy = polar_to_cartesian(dot_r, d_ang, xc, yc)
+                    p.drawEllipse(QPointF(dx, dy), 1.8, 1.8)
+
+            # Strict slice clipping for vector icon and typography
+            if plugin and s_id in plugin.slices:
+                s_info = plugin.slices[s_id]
+                p.save()
+                p.setClipPath(slice_path)
+
+                # Vector Icon: 20x20px centered 20px above primary slice title
+                icon_name = self._resolve_slice_icon(s_info, s_id)
+                icon_color = QColor("#00F5D4") if is_hover else QColor("#6366F1")
+                icon_pix = IconRegistry.get_tinted_pixmap(icon_name, size=20, color=icon_color)
+                p.drawPixmap(int(round(cx - 10.0)), int(round(cy - 36.0)), icon_pix)
+
+                # Bounded Text Rectangle:
+                # Left/Right: QRectF(cx - 48, cy - 16, 96, 42)
+                # Top/Bottom: QRectF(cx - 65, cy - 16, 130, 42)
+                w_box = 96.0 if is_lr else 130.0
+                text_rect = QRectF(cx - w_box / 2.0, cy - 16.0, w_box, 42.0)
+
+                # Primary Titles: pure crisp white #F8FAFC (9.5pt Bold)
+                title_font = CyberpunkPalette.get_ui_font(9.5, bold=True)
+                title_fm = QFontMetrics(title_font)
+                title_text = s_info.name.replace(" / ", "\n") if is_lr else s_info.name
+                title_bounds = title_fm.boundingRect(
+                    text_rect.toRect(),
+                    int(Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignCenter),
+                    title_text,
+                )
+
+                p.setFont(title_font)
+                p.setPen(QColor("#F8FAFC"))
+
+                if "\n" not in title_text and title_bounds.height() <= 20:
+                    # Single-line title
+                    p.drawText(
+                        QRectF(cx - w_box / 2.0, cy - 16.0, w_box, 18.0),
+                        Qt.AlignmentFlag.AlignCenter,
+                        title_text,
+                    )
+                    # Subtitle: high-contrast muted slate #94A3B8 (8pt Medium, #E2E8F0 when hovered)
+                    sub_font = CyberpunkPalette.get_ui_font(8.0, bold=False, weight=QFont.Weight.Medium)
+                    sub_fm = QFontMetrics(sub_font)
+                    p.setFont(sub_font)
+                    p.setPen(QColor("#E2E8F0") if is_hover else QColor("#94A3B8"))
+                    elided_desc = sub_fm.elidedText(s_info.description, Qt.TextElideMode.ElideRight, int(w_box))
+                    p.drawText(
+                        QRectF(cx - w_box / 2.0, cy + 3.0, w_box, 20.0),
+                        Qt.AlignmentFlag.AlignCenter,
+                        elided_desc,
+                    )
+                else:
+                    # Multi-line title wrapped inside bounded rectangle
+                    p.drawText(
+                        text_rect,
+                        Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
+                        title_text,
+                    )
+
+                p.restore()
+
+        # 3. Center Gravity Well Core (r < 65px)
+        p.setBrush(QBrush(QColor("#090D16")))
+        is_gw_hover = (self.hovered_zone == "GRAVITY_WELL")
+        gw_border = QColor("#00F5D4") if is_gw_hover else QColor("#334155")
+        p.setPen(QPen(gw_border, 2.0))
         p.drawEllipse(QPointF(xc, yc), R_GRAVITY_WELL, R_GRAVITY_WELL)
 
-        # 4. Primary Slice Labels (drawn cleanly on top of all ring layers)
-        if plugin:
-            for s_id in (1, 2, 3, 4):
-                if s_id not in plugin.slices:
-                    continue
-                cfg = SLICE_ANGLES[s_id]
-                s_info = plugin.slices[s_id]
-                is_hover = (self.hovered_slice_id == s_id and self.hovered_zone == "PRIMARY")
-
-                # Label midpoint radius
-                mid_r = 122.0
-                tx, ty = polar_to_cartesian(mid_r, cfg["center"], xc, yc)
-
-                # Draw Title
-                p.setFont(CyberpunkPalette.get_ui_font(9.0, bold=True))
-                p.setPen(CyberpunkPalette.NEON_CYAN if is_hover else CyberpunkPalette.TEXT_PRIMARY)
-                p.drawText(
-                    QRectF(tx - 65, ty - 16, 130, 18),
-                    Qt.AlignmentFlag.AlignCenter,
-                    s_info.name,
-                )
-
-                # Draw Subtitle with pixel-accurate QFontMetrics elision
-                p.setFont(CyberpunkPalette.get_ui_font(7.5, bold=False))
-                p.setPen(CyberpunkPalette.TEXT_MUTED)
-                fm = p.fontMetrics()
-                elided_desc = fm.elidedText(s_info.description, Qt.TextElideMode.ElideRight, 130)
-                p.drawText(
-                    QRectF(tx - 65, ty + 2, 130, 16),
-                    Qt.AlignmentFlag.AlignCenter,
-                    elided_desc,
-                )
-
-        # 4. Progress Arc Spinner (around Gravity Well)
+        # Progress Arc Spinner (around Gravity Well boundary)
         if self.anim_ctrl.spinner_angle > 0.0 or self.worker_pool.active_thread_count > 0:
             spinner_rect = QRectF(
-                xc - R_GRAVITY_WELL - 2,
-                yc - R_GRAVITY_WELL - 2,
-                (R_GRAVITY_WELL + 2) * 2,
-                (R_GRAVITY_WELL + 2) * 2,
+                xc - R_GRAVITY_WELL - 2.0,
+                yc - R_GRAVITY_WELL - 2.0,
+                (R_GRAVITY_WELL + 2.0) * 2.0,
+                (R_GRAVITY_WELL + 2.0) * 2.0,
             )
-            spinner_pen = QPen(CyberpunkPalette.NEON_CYAN, 3.5)
+            spinner_pen = QPen(CyberpunkPalette.NEON_CYAN, 3.0)
             spinner_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             p.setPen(spinner_pen)
             p.setBrush(Qt.BrushStyle.NoBrush)
-            # In Qt degrees (1/16th of a degree)
             p.drawArc(
                 spinner_rect,
                 int(self.anim_ctrl.spinner_angle * 16),
                 int(90 * 16),
             )
 
-        # 5. Center Gravity Well Telemetry & Badge Text
-        # Mode Badge
-        p.setFont(CyberpunkPalette.get_font(9, bold=True))
-        p.setPen(CyberpunkPalette.NEON_CYAN)
-        p.drawText(
-            QRectF(xc - 55, yc - 46, 110, 18),
-            Qt.AlignmentFlag.AlignCenter,
-            f"[{self.active_mode.value}]",
-        )
+        # 4. Mode Badge inside Solid Pill Background (#1E293B fill, #00F5D4 text)
+        pill_rect = QRectF(xc - 38.0, yc - 44.0, 76.0, 18.0)
+        p.setBrush(QBrush(QColor("#1E293B")))
+        p.setPen(QPen(QColor("#334155"), 1.0))
+        p.drawRoundedRect(pill_rect, 9.0, 9.0)
 
-        # Telemetry HUD
+        p.setFont(CyberpunkPalette.get_ui_font(7.5, bold=True))
+        p.setPen(QColor("#00F5D4"))
+        p.drawText(pill_rect, Qt.AlignmentFlag.AlignCenter, self.active_mode.value)
+
+        # 5. 7 Solid 4px Pager Dots directly below pill (#00F5D4 active, #334155 inactive)
+        dot_y = yc - 18.0
+        dot_radius = 2.0
+        dot_spacing = 8.0
+        start_x = xc - ((len(ORDERED_MODES) - 1) * dot_spacing) / 2.0  # xc - 24.0
+
+        p.setPen(Qt.PenStyle.NoPen)
+        for idx, m_mode in enumerate(ORDERED_MODES):
+            dot_x = start_x + idx * dot_spacing
+            is_active_dot = (m_mode == self.active_mode)
+            p.setBrush(QBrush(QColor("#00F5D4") if is_active_dot else QColor("#334155")))
+            p.drawEllipse(QPointF(dot_x, dot_y), dot_radius, dot_radius)
+
+        # 6. Center Gravity Well Telemetry HUD
         snap = self.telemetry.snapshot()
         p.setFont(CyberpunkPalette.get_font(7, bold=False))
         p.setPen(CyberpunkPalette.TEXT_PRIMARY)
         p.drawText(
-            QRectF(xc - 55, yc - 24, 110, 16),
+            QRectF(xc - 55.0, yc - 6.0, 110.0, 14.0),
             Qt.AlignmentFlag.AlignCenter,
             f"Latency: {snap.latency_ms:.0f}ms",
         )
         p.setPen(CyberpunkPalette.TEXT_MUTED)
         p.drawText(
-            QRectF(xc - 55, yc - 8, 110, 16),
+            QRectF(xc - 55.0, yc + 8.0, 110.0, 14.0),
             Qt.AlignmentFlag.AlignCenter,
             f"RAM: {snap.ram_mb:.0f}MB",
         )
         p.drawText(
-            QRectF(xc - 55, yc + 8, 110, 16),
+            QRectF(xc - 55.0, yc + 22.0, 110.0, 14.0),
             Qt.AlignmentFlag.AlignCenter,
             f"Blocked: {snap.secrets_blocked}",
         )
@@ -862,15 +947,15 @@ class RadialWindow(QWidget):
         p.setFont(CyberpunkPalette.get_font(8, bold=True))
         p.setPen(CyberpunkPalette.AMBER_ALERT if q_count > 0 else CyberpunkPalette.NEON_CYAN)
         p.drawText(
-            QRectF(xc - 55, yc + 28, 110, 18),
+            QRectF(xc - 55.0, yc + 38.0, 110.0, 16.0),
             Qt.AlignmentFlag.AlignCenter,
             q_text,
         )
 
-        # 6. Sleek Floating Toast Overlay
+        # 7. Sleek Floating Toast Overlay
         if self._toast_message:
-            toast_rect = QRectF(20, h - 45, w - 40, 32)
-            p.setBrush(QBrush(QColor(15, 23, 42, 245)))
+            toast_rect = QRectF(20.0, h - 45.0, w - 40.0, 32.0)
+            p.setBrush(QBrush(QColor("#111827")))
             p.setPen(QPen(CyberpunkPalette.NEON_CYAN, 1.5))
             p.drawRoundedRect(toast_rect, 6.0, 6.0)
 
