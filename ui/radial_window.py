@@ -119,6 +119,11 @@ class RadialWindow(QWidget):
         # Connect clipboard pipe toast emission
         self.clipboard_pipe.streamed.connect(self._on_clipboard_streamed)
 
+        # Clipboard Auto-Detection: auto-morph radial mode when user copies new data
+        cb = QApplication.clipboard()
+        if cb:
+            cb.dataChanged.connect(self._on_clipboard_data_changed)
+
         # 3. Polymorphic Plugin Registry
         self.plugins: Dict[MimeMode, RadialAction] = {
             MimeMode.IMAGE: ImageOpsPlugin(),
@@ -254,6 +259,29 @@ class RadialWindow(QWidget):
         """Switch polymorphic mode."""
         self.active_mode = mode
         self.update()
+
+    def _on_clipboard_data_changed(self) -> None:
+        """Dynamically detect and morph radial mode when user copies new content to clipboard."""
+        cb = QApplication.clipboard()
+        mime = cb.mimeData() if cb else None
+        if not mime:
+            return
+
+        payload = None
+        if mime.hasUrls() and mime.urls():
+            payload = mime.urls()[0].toLocalFile()
+        elif mime.hasImage() and not mime.imageData().isNull():
+            payload = mime.imageData()
+        elif cb and not cb.image().isNull():
+            payload = cb.image()
+        elif mime.hasText() and mime.text().strip():
+            payload = mime.text()
+
+        if payload is not None and payload != "ArcP Sample Payload":
+            detected_mode, desc = MimeRouter.classify_payload(payload)
+            if detected_mode != self.active_mode:
+                self.set_active_mode(detected_mode)
+                self.show_toast(f"Mode Auto-Shift: {detected_mode.value}", icon_name="sparkle")
 
     # -------------------------------------------------------------------------
     # Drag and Drop Events (<10ms Header Sniffing & Target Routing)
@@ -410,14 +438,33 @@ class RadialWindow(QWidget):
                     payload = mime.text()
 
             # Auto-classify clipboard payload if detected
-            if payload is not None and not isinstance(payload, str):
+            if payload is not None and payload != "ArcP Sample Payload":
                 detected_mode, _ = MimeRouter.classify_payload(payload)
                 if detected_mode != self.active_mode:
-                    self.active_mode = detected_mode
+                    self.set_active_mode(detected_mode)
 
-            # Priority 3: Fallback demo string if clipboard is completely blank
+            # Priority 3: Fallback mode-appropriate sample if clipboard is completely blank
             if payload is None:
-                payload = "ArcP Sample Payload"
+                if self.active_mode == MimeMode.IMAGE:
+                    import io
+                    from PIL import Image, ImageDraw
+                    sample_im = Image.new("RGB", (400, 200), color="#1E293B")
+                    d = ImageDraw.Draw(sample_im)
+                    d.text((30, 40), "ArcP In-Memory Visual Tensor", fill="#38BDF8")
+                    d.text((30, 80), "Zero-Disk Context Pipeline", fill="#F8FAFC")
+                    d.text((30, 120), "Copy any screenshot or image (Win+Shift+S)", fill="#94A3B8")
+                    buf = io.BytesIO()
+                    sample_im.save(buf, format="PNG")
+                    payload = buf.getvalue()
+                elif self.active_mode == MimeMode.DATASET:
+                    payload = "id,name,role,salary\n1,Alice,Engineer,120000\n2,Bob,Architect,140000"
+                elif self.active_mode == MimeMode.INFRA:
+                    payload = "FROM python:3.11-slim\nUSER root\nEXPOSE 22\nCMD [\"python\", \"app.py\"]"
+                elif self.active_mode == MimeMode.GIT_PATCH:
+                    payload = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,1 +1,1 @@\n-debug=True\n+debug=False\n"
+                else:
+                    payload = "2026-10-18 12:00:00 ERROR [auth] AWS_KEY=AKIAIOSFODNN7EXAMPLE login failed for root"
+                self.show_toast(f"No clipboard item • Executing {self.active_mode.value} sample", icon_name="info")
 
             self._dispatch_action(payload, slice_id, sub_option)
             self.update()

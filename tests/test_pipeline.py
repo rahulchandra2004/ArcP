@@ -233,6 +233,25 @@ class TestPlugins:
         res_webp = plugin.execute(png_bytes, slice_id=4, sub_option="webp_lossless")
         assert len(res_webp.data) > 0
 
+    def test_image_ops_ocr_text_extraction(self):
+        plugin = ImageOpsPlugin()
+        from PIL import Image, ImageDraw
+        img = Image.new("RGB", (600, 200), color="white")
+        draw = ImageDraw.Draw(img)
+        draw.text((20, 30), "ArcP OCR Test Extraction", fill="black")
+        draw.text((20, 80), "Zero-Disk In-Memory Validation", fill="black")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        res = plugin.execute(buf.getvalue(), slice_id=3)
+        assert res.mode == MimeMode.IMAGE
+        assert "ArcP Visual Tensor" in res.data
+        assert "Image Metadata & Tensor Properties" in res.data
+        assert "Layout & Morphological Structural Analysis" in res.data
+        if sys.platform == "win32":
+            assert "Windows Native WinRT OCR" in res.data
+            assert "Extracted OCR Text Content" in res.data
+
+
     def test_data_ops_plugin(self):
         plugin = DataOpsPlugin()
         csv_data = (

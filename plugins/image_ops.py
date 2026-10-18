@@ -9,6 +9,8 @@ import base64
 import io
 import os
 import re
+import subprocess
+import sys
 import time
 from typing import Any, Dict, Optional, Tuple
 
@@ -218,22 +220,136 @@ class ImageOpsPlugin(RadialAction):
         clean_img.save(out_buf, format="PNG", optimize=True)
         return out_buf.getvalue()
 
+    @staticmethod
+    def _run_windows_native_ocr(pil_img: Image.Image) -> str:
+        """
+        Execute in-memory OCR via Windows 10/11 native Windows.Media.Ocr.OcrEngine.
+        Runs purely in RAM via stdin stream without creating temporary files.
+        """
+        if sys.platform != "win32":
+            return ""
+
+        try:
+            w, h = pil_img.size
+            max_dim = max(w, h)
+            # Ensure dimensions fit within WinRT limits (clamped to max 2400) and large enough (>600)
+            scale = 1.0
+            if max_dim > 2400:
+                scale = 2400.0 / max_dim
+            elif max_dim < 600:
+                scale = min(3.0, 1000.0 / max_dim)
+
+            if scale != 1.0:
+                new_w = max(1, int(w * scale))
+                new_h = max(1, int(h * scale))
+                pil_img = pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+            # Composite alpha over solid white background for high contrast
+            if pil_img.mode in ("RGBA", "LA") or (pil_img.mode == "P" and "transparency" in pil_img.info):
+                bg = Image.new("RGB", pil_img.size, (255, 255, 255))
+                converted = pil_img.convert("RGBA")
+                bg.paste(converted, mask=converted.split()[3])
+                proc_img = bg
+            else:
+                proc_img = pil_img.convert("RGB")
+
+            buf = io.BytesIO()
+            proc_img.save(buf, format="PNG")
+            img_bytes = buf.getvalue()
+
+            ps_script = """
+$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+$asTaskGeneric = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' }[0]
+
+Function Await($WinRtTask, $ResultType) {
+    $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
+    $netTask = $asTask.Invoke($null, @($WinRtTask))
+    $netTask.Wait(-1) | Out-Null
+    return $netTask.Result
+}
+
+[Windows.Media.Ocr.OcrEngine, Windows.Foundation.UniversalApiContract, ContentType = WindowsRuntime] | Out-Null
+[Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation.UniversalApiContract, ContentType = WindowsRuntime] | Out-Null
+[Windows.Storage.Streams.InMemoryRandomAccessStream, Windows.Foundation.UniversalApiContract, ContentType = WindowsRuntime] | Out-Null
+
+$stdin = [System.Console]::OpenStandardInput()
+$ms = New-Object System.IO.MemoryStream
+$stdin.CopyTo($ms)
+$bytes = $ms.ToArray()
+
+$ras = New-Object Windows.Storage.Streams.InMemoryRandomAccessStream
+$writer = New-Object Windows.Storage.Streams.DataWriter($ras)
+$writer.WriteBytes($bytes)
+Await ($writer.StoreAsync()) ([uint32]) | Out-Null
+Await ($writer.FlushAsync()) ([bool]) | Out-Null
+$ras.Seek(0)
+
+$decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($ras)) ([Windows.Graphics.Imaging.BitmapDecoder])
+$bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
+
+$engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
+if ($null -eq $engine) {
+    $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage([Windows.Globalization.Language]::new('en-US'))
+}
+
+$res = Await ($engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
+if ($null -ne $res -and $null -ne $res.Lines) {
+    $allText = ($res.Lines | ForEach-Object { $_.Text }) -join "`n"
+    $utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($allText)
+    $stdout = [System.Console]::OpenStandardOutput()
+    $stdout.Write($utf8Bytes, 0, $utf8Bytes.Length)
+    $stdout.Flush()
+}
+"""
+            encoded = base64.b64encode(ps_script.encode("utf-16le")).decode("ascii")
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded],
+                input=img_bytes,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=6,
+            )
+            if proc.returncode == 0:
+                raw_out = proc.stdout.decode("utf-8", errors="replace").strip()
+                return raw_out
+        except Exception:
+            pass
+        return ""
+
     def _ocr_tensor_extract(self, raw_bytes: bytes) -> str:
-        """Extract OCR text if pytesseract exists, else morphological table & tensor summary."""
+        """Extract OCR text via Windows Native WinRT OCR or Tesseract, with morphological tensor statistics."""
         try:
             pil_img = Image.open(io.BytesIO(raw_bytes))
         except Exception as e:
-            return f"# ArcP Visual Tensor & OCR Extraction\n\n- **Status:** Unidentified image payload ({len(raw_bytes)} bytes)\n- **Detail:** Expected valid image binary (PNG, JPEG, WEBP, BMP). Received non-image stream: `{raw_bytes[:40]}`"
+            return (
+                "# ArcP Visual Tensor & OCR Extraction\n\n"
+                f"- **Status:** Unidentified image payload ({len(raw_bytes)} bytes)\n"
+                f"- **Detail:** Expected valid image binary (PNG, JPEG, WEBP, BMP). Received non-image stream: `{raw_bytes[:40]}`"
+            )
         width, height = pil_img.size
         mode = pil_img.mode
 
         ocr_text = ""
-        ocr_engine_used = False
+        ocr_engine_name = "None"
 
-        if pytesseract is not None:
+        # Tier 1: Windows Native WinRT OCR (Zero-disk, built into Windows 10/11)
+        if sys.platform == "win32":
+            try:
+                ocr_text = self._run_windows_native_ocr(pil_img)
+                if ocr_text:
+                    ocr_engine_name = "Windows Native WinRT OCR"
+            except Exception:
+                pass
+
+        # Tier 2: pytesseract (if binary is available on PATH)
+        if not ocr_text and pytesseract is not None:
             try:
                 ocr_text = pytesseract.image_to_string(pil_img).strip()
-                ocr_engine_used = True
+                if ocr_text:
+                    ocr_engine_name = "Tesseract OCR Engine"
             except Exception:
                 ocr_text = ""
 
@@ -242,8 +358,9 @@ class ImageOpsPlugin(RadialAction):
         mean_rgb = arr.mean(axis=(0, 1)).round(1)
         std_rgb = arr.std(axis=(0, 1)).round(1)
 
-        # Morphological table & structure detection via OpenCV
+        # Morphological table & text structure detection via OpenCV
         detected_structures = []
+        detected_text_regions = 0
         if cv2 is not None:
             try:
                 gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
@@ -259,6 +376,19 @@ class ImageOpsPlugin(RadialAction):
                     x, y, w, h = cv2.boundingRect(c)
                     if w > 40 and h > 20:
                         detected_structures.append(f"- Grid Cell: `[x={x}, y={y}, w={w}, h={h}]`")
+
+                # Detect text-like contour density
+                grad_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 3))
+                grad = cv2.morphologyEx(gray, cv2.MORPH_GRADIENT, grad_kernel)
+                _, thresh = cv2.threshold(grad, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+                close_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 5))
+                connected = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, close_kernel)
+                text_cnts, _ = cv2.findContours(connected, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                for tc in text_cnts:
+                    _, _, cw, ch = cv2.boundingRect(tc)
+                    ar = cw / float(ch + 1e-5)
+                    if ar > 2.0 and 800 < (cw * ch) < (height * width * 0.15):
+                        detected_text_regions += 1
             except Exception:
                 pass
 
@@ -271,10 +401,11 @@ class ImageOpsPlugin(RadialAction):
             f"- **Channels / Mode:** `{mode}` ({arr.shape})",
             f"- **Mean RGB:** `R={mean_rgb[0]}, G={mean_rgb[1]}, B={mean_rgb[2]}`",
             f"- **StdDev RGB:** `R={std_rgb[0]}, G={std_rgb[1]}, B={std_rgb[2]}`",
+            f"- **OCR Engine:** `{ocr_engine_name}`",
             "",
         ]
 
-        if ocr_engine_used and ocr_text:
+        if ocr_text:
             lines.extend([
                 "### Extracted OCR Text Content",
                 "```text",
@@ -284,11 +415,21 @@ class ImageOpsPlugin(RadialAction):
             ])
         else:
             lines.extend([
-                "### Layout & Morphological Structural Analysis",
-                f"- **Grid Cells Detected:** `{len(detected_structures)}`",
+                "### Extracted Text Status",
+                "> [!NOTE]",
+                "> No legible alphanumeric characters detected in this visual payload.",
+                f"> Morphological scanner located `{detected_text_regions}` potential text regions.",
+                "> If this image was previously processed through **CV Smart Blur**, sensitive text regions have been Gaussian-blurred and redacted.",
+                "",
             ])
-            lines.extend(detected_structures or ["- No explicit tabular grids detected."])
-            lines.append("")
+
+        lines.extend([
+            "### Layout & Morphological Structural Analysis",
+            f"- **Text-Density Clusters Detected:** `{detected_text_regions}`",
+            f"- **Grid Cells / Tables Detected:** `{len(detected_structures)}`",
+        ])
+        lines.extend(detected_structures or ["- No explicit tabular grids detected."])
+        lines.append("")
 
         return "\n".join(lines)
 
