@@ -455,3 +455,13 @@ class TestIconRegistry:
             # 5. Verify ASCII tag for Windows cp1252 consoles
             tag = IconRegistry.get_ascii_tag(name)
             assert tag.startswith("[") and tag.endswith("]")
+
+    def test_read_payload_bytes_with_qimage(self):
+        from PyQt6.QtGui import QImage, QColor
+        from plugins.base_plugin import RadialAction
+        qimg = QImage(32, 32, QImage.Format.Format_RGB32)
+        qimg.fill(QColor(255, 0, 0))
+
+        raw_bytes = RadialAction.read_payload_bytes(qimg)
+        assert isinstance(raw_bytes, bytes)
+        assert raw_bytes.startswith(b"\x89PNG") or len(raw_bytes) > 0

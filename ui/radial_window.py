@@ -375,18 +375,52 @@ class RadialWindow(QWidget):
             return
 
         if self.hovered_slice_id in (1, 2, 3, 4):
-            # Execute with current clipboard text
-            cb = QApplication.clipboard()
-            clip_text = cb.text() if cb else ""
+            slice_id = self.hovered_slice_id
             sub_option = None
             plugin = self.plugins.get(self.active_mode)
-            if plugin and self.hovered_slice_id in plugin.slices:
-                slice_cfg = plugin.slices[self.hovered_slice_id]
+            if plugin and slice_id in plugin.slices:
+                slice_cfg = plugin.slices[slice_id]
                 if self.hovered_zone == "CONCENTRIC" and self.hovered_sub_slice_idx is not None:
                     if 0 <= self.hovered_sub_slice_idx < len(slice_cfg.sub_slices):
                         sub_option = slice_cfg.sub_slices[self.hovered_sub_slice_idx].id
 
-            self._dispatch_action(clip_text or "ArcP Sample Payload", self.hovered_slice_id, sub_option)
+            # Priority 1: If items are queued in the Gravity Well, execute them!
+            if not self.gravity_well.is_empty:
+                batch = self.gravity_well.dequeue_all()
+                self.telemetry.set_queue_count(0)
+                # Dispatch each queued payload
+                for item in batch:
+                    self._dispatch_action(item.raw_data, slice_id, sub_option)
+                self.show_toast(f"Processing {len(batch)} queued item(s) on Slice {slice_id}", icon_name="zap")
+                self.update()
+                return
+
+            # Priority 2: Extract active payload from Windows clipboard (files, images, or text)
+            payload: Any = None
+            cb = QApplication.clipboard()
+            mime = cb.mimeData() if cb else None
+            if mime is not None:
+                if mime.hasUrls() and mime.urls():
+                    payload = mime.urls()[0].toLocalFile()
+                elif mime.hasImage() and not mime.imageData().isNull():
+                    payload = mime.imageData()
+                elif cb and not cb.image().isNull():
+                    payload = cb.image()
+                elif mime.hasText() and mime.text().strip():
+                    payload = mime.text()
+
+            # Auto-classify clipboard payload if detected
+            if payload is not None and not isinstance(payload, str):
+                detected_mode, _ = MimeRouter.classify_payload(payload)
+                if detected_mode != self.active_mode:
+                    self.active_mode = detected_mode
+
+            # Priority 3: Fallback demo string if clipboard is completely blank
+            if payload is None:
+                payload = "ArcP Sample Payload"
+
+            self._dispatch_action(payload, slice_id, sub_option)
+            self.update()
 
     def _update_hover_coordinates(self, x: float, y: float) -> None:
         xc = self.width() / 2.0

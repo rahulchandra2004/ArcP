@@ -70,16 +70,37 @@ class RadialAction(ABC):
 
     @staticmethod
     def read_payload_bytes(payload: Any) -> bytes:
-        """Extract raw bytes from string path, bytes, or file-like object."""
+        """Extract raw bytes from string path, bytes, QImage, or file-like object."""
         if isinstance(payload, bytes):
             return payload
         if isinstance(payload, bytearray):
             return bytes(payload)
         if isinstance(payload, str):
-            if os.path.exists(payload) and os.path.isfile(payload):
-                with open(payload, "rb") as f:
+            clean_path = payload.strip().strip('"').strip("'")
+            if clean_path.startswith("file:///"):
+                clean_path = clean_path[8:]
+            elif clean_path.startswith("file://"):
+                clean_path = clean_path[7:]
+            if os.path.exists(clean_path) and os.path.isfile(clean_path):
+                with open(clean_path, "rb") as f:
                     return f.read()
             return payload.encode("utf-8")
+        # Check for QImage or QPixmap
+        try:
+            from PyQt6.QtCore import QBuffer, QIODevice
+            from PyQt6.QtGui import QImage, QPixmap
+            if isinstance(payload, (QImage, QPixmap)):
+                img = payload if isinstance(payload, QImage) else payload.toImage()
+                buf = QBuffer()
+                buf.open(QIODevice.OpenModeFlag.WriteOnly)
+                img.save(buf, "PNG")
+                return bytes(buf.data())
+        except Exception:
+            pass
+        if hasattr(payload, "save"):  # PIL Image
+            bio = io.BytesIO()
+            payload.save(bio, format="PNG")
+            return bio.getvalue()
         if hasattr(payload, "read"):
             return payload.read()
         return str(payload).encode("utf-8")
@@ -88,8 +109,13 @@ class RadialAction(ABC):
     def read_payload_text(payload: Any) -> str:
         """Extract UTF-8 text from payload."""
         if isinstance(payload, str):
-            if os.path.exists(payload) and os.path.isfile(payload):
-                with open(payload, "r", encoding="utf-8", errors="replace") as f:
+            clean_path = payload.strip().strip('"').strip("'")
+            if clean_path.startswith("file:///"):
+                clean_path = clean_path[8:]
+            elif clean_path.startswith("file://"):
+                clean_path = clean_path[7:]
+            if os.path.exists(clean_path) and os.path.isfile(clean_path):
+                with open(clean_path, "r", encoding="utf-8", errors="replace") as f:
                     return f.read()
             return payload
         if isinstance(payload, (bytes, bytearray)):
