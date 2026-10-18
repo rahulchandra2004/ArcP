@@ -251,6 +251,21 @@ class TestPlugins:
             assert "Windows Native WinRT OCR" in res.data
             assert "Extracted OCR Text Content" in res.data
 
+    def test_image_ops_smart_blur_targeted_pii(self):
+        plugin = ImageOpsPlugin()
+        from PIL import Image, ImageDraw
+        img = Image.new("RGB", (600, 200), color="white")
+        draw = ImageDraw.Draw(img)
+        draw.text((20, 30), "Contact user: alice@internal.corp", fill="black")
+        draw.text((20, 80), "Welcome to Public Dashboard", fill="black")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        res = plugin.execute(buf.getvalue(), slice_id=1, sub_option="targeted_pii")
+        assert res.mode == MimeMode.IMAGE
+        assert len(res.data) > 0
+        assert res.details["mode"] == "targeted_pii"
+
+
 
     def test_data_ops_plugin(self):
         plugin = DataOpsPlugin()
