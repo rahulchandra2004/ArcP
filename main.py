@@ -78,6 +78,11 @@ def main() -> int:
         action="store_true",
         help="Run automated visual showcase of all 7 polymorphic modes",
     )
+    parser.add_argument(
+        "--windowed",
+        action="store_true",
+        help="Launch in standard windowed desktop mode with title bar and border instead of frameless overlay",
+    )
 
     args = parser.parse_args()
 
@@ -96,16 +101,17 @@ def main() -> int:
     app.setApplicationName("ArcP")
     app.setApplicationDisplayName("ArcP Radial HUD")
     app.setWindowIcon(create_arcp_icon())
+    app.setQuitOnLastWindowClosed(False)
 
     # Graceful Ctrl+C handling
     signal.signal(signal.SIGINT, signal.SIG_DFL)
-    sigint_timer = QTimer()
+    sigint_timer = QTimer(app)
     sigint_timer.start(500)
     sigint_timer.timeout.connect(lambda: None)
 
     # Determine start state
     start_collapsed = args.daemon and not args.demo
-    window = RadialWindow(start_collapsed=start_collapsed)
+    window = RadialWindow(start_collapsed=start_collapsed, windowed=args.windowed)
 
     # Force into EXPANDED state centered on primary screen when not in daemon mode
     if not start_collapsed:
@@ -119,7 +125,15 @@ def main() -> int:
     window.raise_()
     window.activateWindow()
 
-    print(f"ArcP HUD launched at ({window.x()}, {window.y()})", flush=True)
+    print("=" * 60, flush=True)
+    print("⚡ ArcP: Autonomous Radial Context Pipeline", flush=True)
+    print(f"Presentation Mode: {'STANDARD WINDOWED' if args.windowed else 'FRAMELESS RADIAL HUD'}", flush=True)
+    print(f"Window Geometry  : ({window.x()}, {window.y()}) [size: {window.width()}x{window.height()}]", flush=True)
+    print(f"Initial State    : {'FLOATING SEED' if start_collapsed else 'EXPANDED HUD'}", flush=True)
+    print("Global Hotkey    : Ctrl+Shift+Space (Summon HUD under cursor)", flush=True)
+    print("Gesture Trigger  : Rapid cursor shake (3 reversals)", flush=True)
+    print("System Tray Icon : Active in Windows taskbar notification area", flush=True)
+    print("=" * 60, flush=True)
 
     if args.demo:
         run_demo_sequence(window)

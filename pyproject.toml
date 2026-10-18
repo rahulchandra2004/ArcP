@@ -32,3 +32,8 @@ ocr = [
 
 [project.scripts]
 arcp = "main:main"
+
+[tool.setuptools]
+packages = ["core", "ui", "plugins"]
+py-modules = ["main"]
+

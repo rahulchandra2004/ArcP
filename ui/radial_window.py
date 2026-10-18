@@ -89,19 +89,25 @@ class RadialWindow(QWidget):
     EXPANDED_SIZE = 520
     COLLAPSED_SIZE = 40
 
-    def __init__(self, start_collapsed: bool = False) -> None:
+    def __init__(self, start_collapsed: bool = False, windowed: bool = False) -> None:
         super().__init__(None)
 
         self.setWindowTitle("ArcP - Autonomous Radial Context Pipeline")
         self.icon = create_arcp_icon()
         self.setWindowIcon(self.icon)
+        self.windowed = windowed
 
         # 1. Window Flags and Attributes
-        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
-        if start_collapsed:
-            flags |= Qt.WindowType.Tool
-        self.setWindowFlags(flags)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        if windowed:
+            self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)
+            self.setStyleSheet("background-color: #0B0F19; color: #E2E8F0;")
+        else:
+            flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+            if start_collapsed:
+                flags |= Qt.WindowType.Tool
+            self.setWindowFlags(flags)
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
         self.setAcceptDrops(True)
         self.setMouseTracking(True)
 
