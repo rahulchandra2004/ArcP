@@ -125,8 +125,14 @@ def main() -> int:
     window.raise_()
     window.activateWindow()
 
+    # Reconfigure stdout/stderr encoding for Windows cp1252 / cmd safety
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     print("=" * 60, flush=True)
-    print("⚡ ArcP: Autonomous Radial Context Pipeline", flush=True)
+    print("[ArcP] Autonomous Radial Context Pipeline", flush=True)
     print(f"Presentation Mode: {'STANDARD WINDOWED' if args.windowed else 'FRAMELESS RADIAL HUD'}", flush=True)
     print(f"Window Geometry  : ({window.x()}, {window.y()}) [size: {window.width()}x{window.height()}]", flush=True)
     print(f"Initial State    : {'FLOATING SEED' if start_collapsed else 'EXPANDED HUD'}", flush=True)
