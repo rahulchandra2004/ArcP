@@ -487,6 +487,11 @@ class BinaryOpsPlugin(RadialAction):
                         constants.append((target.id, node.lineno))
                 self.generic_visit(node)
 
+            def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+                if isinstance(node.target, ast.Name) and node.target.id.isupper():
+                    constants.append((node.target.id, node.lineno))
+                self.generic_visit(node)
+
             def visit_Call(self, node: ast.Call) -> None:
                 if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
                     if node.func.value.id in ("ctypes", "cffi", "cdll", "windll"):

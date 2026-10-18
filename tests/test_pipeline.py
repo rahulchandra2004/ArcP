@@ -415,6 +415,7 @@ class TestPlugins:
             "import ctypes\n"
             "\n"
             "MAX_BUFFER_SIZE = 1048576\n"
+            "DEFAULT_TTL: float = 600.0\n"
             "API_KEY = 'AKIAIOSFODNN7EXAMPLE'\n"
             "\n"
             "class PipelineEngine(QWidget):\n"
@@ -445,6 +446,7 @@ class TestPlugins:
         assert "PipelineEngine" in res_ast.data
         assert "run_worker" in res_ast.data
         assert "MAX_BUFFER_SIZE" in res_ast.data
+        assert "DEFAULT_TTL" in res_ast.data  # ast.AnnAssign type-annotated constant
         assert "ctypes" in res_ast.data
 
         # Slice 4: Cryptographic Hashes & Entropy
@@ -467,6 +469,64 @@ class TestPlugins:
         window.manual_mode_override = False
         assert window.manual_mode_override is False
         window.close()
+
+    def test_inspector_drawer_markdown_display(self):
+        from ui.inspector_drawer import InspectorDrawer
+        from plugins.base_plugin import PipeResult
+
+        drawer = InspectorDrawer(None)
+        result = PipeResult(
+            data="# Test Header\n\n| Col A | Col B |\n|---|---|\n| 1 | 2 |\n",
+            action_name="AST Symbol Audit",
+            mode=MimeMode.BINARY,
+            latency_ms=12.5,
+            bytes_streamed=45,
+        )
+
+        drawer.display_result(result)
+        assert drawer.title_label.text() == "AST Symbol Audit"
+        assert drawer.mode_badge.text() == "BINARY"
+        assert "12.5ms" in drawer.latency_badge.text()
+        assert drawer.stack.currentIndex() == 0  # Markdown viewport
+
+        # Test Raw / Rendered Toggle
+        drawer._toggle_raw_rendered()
+        assert drawer._is_raw_view is True
+        assert drawer.btn_toggle_raw.text() == "View Rendered"
+
+        drawer._toggle_raw_rendered()
+        assert drawer._is_raw_view is False
+        assert drawer.btn_toggle_raw.text() == "View Raw"
+
+        # Test Copy button
+        drawer._copy_to_clipboard()
+        assert drawer.btn_copy.text() == "Copied ✓"
+
+        drawer.close()
+
+    def test_inspector_drawer_image_display(self):
+        from ui.inspector_drawer import InspectorDrawer
+        from plugins.base_plugin import PipeResult
+        from PyQt6.QtGui import QImage, QColor
+
+        drawer = InspectorDrawer(None)
+        qimg = QImage(64, 48, QImage.Format.Format_RGB32)
+        qimg.fill(QColor(0, 245, 212))
+
+        result = PipeResult(
+            data=qimg,
+            action_name="CV Smart Blur",
+            mode=MimeMode.IMAGE,
+            latency_ms=8.0,
+            bytes_streamed=1024,
+        )
+
+        drawer.display_result(result)
+        assert drawer.title_label.text() == "CV Smart Blur"
+        assert drawer.stack.currentIndex() == 1  # Image preview viewport
+        assert "64 × 48 px" in drawer.image_meta_label.text()
+
+        drawer.close()
 
     def test_git_ops_plugin(self):
         vault = TokenVault()

@@ -74,6 +74,7 @@ from plugins.infra_ops import InfraOpsPlugin
 from plugins.ml_ops import MlOpsPlugin
 from ui.animations import AnimationController, CyberpunkPalette
 from ui.cursor_watcher import CursorWatcher
+from ui.inspector_drawer import InspectorDrawer
 from ui.geometry import (
     R_CONCENTRIC_INNER,
     R_CONCENTRIC_OUTER,
@@ -182,6 +183,9 @@ class RadialWindow(QWidget):
         self._hud_timer.timeout.connect(self._refresh_hud_telemetry)
         self._hud_timer.start()
 
+        # 6. Solid Matte Inspector Drawer
+        self.inspector_drawer = InspectorDrawer(None)
+
         # Initial geometry
         if self.is_collapsed:
             self.resize(self.COLLAPSED_SIZE, self.COLLAPSED_SIZE)
@@ -267,6 +271,8 @@ class RadialWindow(QWidget):
         """Collapse HUD to subtle 40x40 floating seed docked at screen edge."""
         self.is_collapsed = True
         self.anim_ctrl.cancel_bloom()
+        if hasattr(self, "inspector_drawer") and self.inspector_drawer is not None:
+            self.inspector_drawer.close()
         self.resize(self.COLLAPSED_SIZE, self.COLLAPSED_SIZE)
         self._dock_to_screen_edge()
         self.update()
@@ -695,7 +701,17 @@ class RadialWindow(QWidget):
             latency_ms=result.latency_ms,
             is_html=result.is_html,
         )
+
+        # Immediately pop open/update Inspector Drawer beside HUD
+        if hasattr(self, "inspector_drawer") and self.inspector_drawer is not None:
+            self.inspector_drawer.display_result(result, anchor_rect=self.geometry())
+
         self.update()
+
+    def closeEvent(self, event: Any) -> None:
+        if hasattr(self, "inspector_drawer") and self.inspector_drawer is not None:
+            self.inspector_drawer.close()
+        super().closeEvent(event)
 
     @pyqtSlot(str)
     def _on_action_error(self, err_msg: str) -> None:
