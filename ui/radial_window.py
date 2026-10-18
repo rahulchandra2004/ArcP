@@ -706,19 +706,37 @@ class RadialWindow(QWidget):
         if getattr(s_info, "icon", None):
             return s_info.icon
         name_l = getattr(s_info, "name", "").lower()
-        if any(k in name_l for k in ("scrub", "secret", "blur", "protect", "pii", "sanitiz", "conflict", "hash")):
+        if any(k in name_l for k in ("diff", "conflict", "patch")):
+            return "diff"
+        if any(k in name_l for k in ("commit", "semantic")):
+            return "commit"
+        if any(k in name_l for k in ("branch", "rebase")):
+            return "git_branch"
+        if any(k in name_l for k in ("vram", "cpu", "compute")):
+            return "cpu"
+        if any(k in name_l for k in ("layer", "tensor", "model", "arch")):
+            return "layers"
+        if any(k in name_l for k in ("binary", "hex", "byte", "disasm")):
+            return "binary"
+        if any(k in name_l for k in ("docker", "container", "compose", "compress", "k8s")):
+            return "container"
+        if any(k in name_l for k in ("terminal", "cli", "script", "wrapper", "env")):
+            return "terminal"
+        if any(k in name_l for k in ("database", "sql", "table")):
+            return "database"
+        if any(k in name_l for k in ("hash", "sha", "md5", "crypto")):
+            return "hash"
+        if any(k in name_l for k in ("scrub", "secret", "blur", "protect", "pii", "gatekeeper", "audit")):
             return "shield"
-        if any(k in name_l for k in ("docker", "package", "compress", "compose", "gguf")):
-            return "package"
-        if any(k in name_l for k in ("triage", "inspect", "diff", "search", "sql", "ocr", "re-hydrate")):
+        if any(k in name_l for k in ("triage", "inspect", "search", "ocr", "ioc", "find")):
             return "search"
-        if any(k in name_l for k in ("vram", "entropy", "packed", "quant")):
+        if any(k in name_l for k in ("x-ray", "microscope", "packed", "entropy")):
             return "microscope"
-        if any(k in name_l for k in ("eda", "commit", "zap", "quick", "speed", "torch")):
+        if any(k in name_l for k in ("eda", "zap", "quick", "speed")):
             return "zap"
-        if any(k in name_l for k in ("env", "lock", "stash", "vault")):
+        if any(k in name_l for k in ("lock", "vault", "nuke", "exif", "token")):
             return "lock"
-        fallback_map = {1: "shield", 2: "search", 3: "sparkle", 4: "package"}
+        fallback_map = {1: "shield", 2: "search", 3: "sparkle", 4: "container"}
         return fallback_map.get(s_id, "sparkle")
 
     def _paint_expanded_hud(self, p: QPainter) -> None:
@@ -797,7 +815,7 @@ class RadialWindow(QWidget):
                 p.setPen(QPen(QColor("#00F5D4"), 2.0))
             else:
                 p.setBrush(QBrush(QColor("#111827")))
-                p.setPen(QPen(QColor("#1E293B"), 1.5))
+                p.setPen(QPen(QColor("#334155"), 1.5))
 
             p.drawPath(slice_path)
 
@@ -819,56 +837,38 @@ class RadialWindow(QWidget):
                 p.save()
                 p.setClipPath(slice_path)
 
-                # Vector Icon: 20x20px centered 20px above primary slice title
+                # Vector Icon: 20x20px nudged 6px closer to outer arc (cy - 42.0)
                 icon_name = self._resolve_slice_icon(s_info, s_id)
                 icon_color = QColor("#00F5D4") if is_hover else QColor("#6366F1")
                 icon_pix = IconRegistry.get_tinted_pixmap(icon_name, size=20, color=icon_color)
-                p.drawPixmap(int(round(cx - 10.0)), int(round(cy - 36.0)), icon_pix)
+                p.drawPixmap(int(round(cx - 10.0)), int(round(cy - 42.0)), icon_pix)
 
-                # Bounded Text Rectangle:
-                # Left/Right: QRectF(cx - 48, cy - 16, 96, 42)
-                # Top/Bottom: QRectF(cx - 65, cy - 16, 130, 42)
+                # Bounded Text Rectangle (increased height by 12px: 42px -> 54px):
+                # Left/Right: QRectF(cx - 48, cy - 18, 96, 54)
+                # Top/Bottom: QRectF(cx - 65, cy - 18, 130, 54)
                 w_box = 96.0 if is_lr else 130.0
-                text_rect = QRectF(cx - w_box / 2.0, cy - 16.0, w_box, 42.0)
 
-                # Primary Titles: pure crisp white #F8FAFC (9.5pt Bold)
-                title_font = CyberpunkPalette.get_ui_font(9.5, bold=True)
-                title_fm = QFontMetrics(title_font)
-                title_text = s_info.name.replace(" / ", "\n") if is_lr else s_info.name
-                title_bounds = title_fm.boundingRect(
-                    text_rect.toRect(),
-                    int(Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignCenter),
-                    title_text,
-                )
-
+                # 1-Line Bold White Title (#F8FAFC, 9.0pt Bold)
+                title_font = CyberpunkPalette.get_ui_font(9.0, bold=True)
                 p.setFont(title_font)
                 p.setPen(QColor("#F8FAFC"))
+                title_rect = QRectF(cx - w_box / 2.0, cy - 18.0, w_box, 16.0)
+                p.drawText(
+                    title_rect,
+                    Qt.AlignmentFlag.AlignCenter,
+                    s_info.name,
+                )
 
-                if "\n" not in title_text and title_bounds.height() <= 20:
-                    # Single-line title
-                    p.drawText(
-                        QRectF(cx - w_box / 2.0, cy - 16.0, w_box, 18.0),
-                        Qt.AlignmentFlag.AlignCenter,
-                        title_text,
-                    )
-                    # Subtitle: high-contrast muted slate #94A3B8 (8pt Medium, #E2E8F0 when hovered)
-                    sub_font = CyberpunkPalette.get_ui_font(8.0, bold=False, weight=QFont.Weight.Medium)
-                    sub_fm = QFontMetrics(sub_font)
-                    p.setFont(sub_font)
-                    p.setPen(QColor("#E2E8F0") if is_hover else QColor("#94A3B8"))
-                    elided_desc = sub_fm.elidedText(s_info.description, Qt.TextElideMode.ElideRight, int(w_box))
-                    p.drawText(
-                        QRectF(cx - w_box / 2.0, cy + 3.0, w_box, 20.0),
-                        Qt.AlignmentFlag.AlignCenter,
-                        elided_desc,
-                    )
-                else:
-                    # Multi-line title wrapped inside bounded rectangle
-                    p.drawText(
-                        text_rect,
-                        Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
-                        title_text,
-                    )
+                # Clean wrapped 1-to-2 line Subtitle (#94A3B8, #E2E8F0 on hover, 7.5pt Medium)
+                sub_font = CyberpunkPalette.get_ui_font(7.5, bold=False, weight=QFont.Weight.Medium)
+                p.setFont(sub_font)
+                p.setPen(QColor("#E2E8F0") if is_hover else QColor("#94A3B8"))
+                subtitle_rect = QRectF(cx - w_box / 2.0, cy + 0.0, w_box, 34.0)
+                p.drawText(
+                    subtitle_rect,
+                    Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
+                    s_info.description,
+                )
 
                 p.restore()
 

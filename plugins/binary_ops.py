@@ -27,23 +27,27 @@ class BinaryOpsPlugin(RadialAction):
     def _init_slices(self) -> None:
         self.slices[1] = SliceConfig(
             slice_id=1,
-            name="ELF / PE Header X-Ray",
-            description="Pure Python struct parsing for arch, entry point, ASLR/PIE, and NX",
+            name="ELF / PE X-Ray",
+            description="Arch, entry point, ASLR & NX",
+            icon="microscope",
         )
         self.slices[2] = SliceConfig(
             slice_id=2,
-            name="Strings & IOC Extractor",
-            description="Extract printable strings and categorize URLs, IPs, paths, and registry keys",
+            name="IOC Extractor",
+            description="Extract URLs, IPs, paths & keys",
+            icon="search",
         )
         self.slices[3] = SliceConfig(
             slice_id=3,
-            name="Symbol & Library Audit",
-            description="Inspect imported shared libraries (.dll/.so) and symbols",
+            name="Symbol Audit",
+            description="Inspect imported libs & symbols",
+            icon="binary",
         )
         self.slices[4] = SliceConfig(
             slice_id=4,
-            name="Cryptographic Hashes",
-            description="MD5, SHA1, SHA256 & Shannon byte-entropy packer detection (>7.2)",
+            name="Crypto Hashes",
+            description="MD5, SHA256 & packer entropy",
+            icon="hash",
         )
 
     def execute(

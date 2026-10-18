@@ -45,23 +45,27 @@ class MlOpsPlugin(RadialAction):
     def _init_slices(self) -> None:
         self.slices[1] = SliceConfig(
             slice_id=1,
-            name="Pickle Opcode Audit",
-            description="Static opcode disassembly detecting REDUCE/GLOBAL injection vectors",
+            name="Opcode Audit",
+            description="Detect pickle injection vectors",
+            icon="shield",
         )
         self.slices[2] = SliceConfig(
             slice_id=2,
-            name="Architecture & Tensors",
-            description="Extract parameter totals, shapes, and layer hierarchy",
+            name="Tensor Inspect",
+            description="Parameter shapes & layer tree",
+            icon="layers",
         )
         self.slices[3] = SliceConfig(
             slice_id=3,
-            name="Quantize Calculator",
-            description="FP32 -> FP16/INT8 memory reduction & export boilerplate",
+            name="VRAM Calculator",
+            description="FP16/INT8 memory reduction",
+            icon="cpu",
         )
         self.slices[4] = SliceConfig(
             slice_id=4,
-            name="Inference Wrapper Gen",
-            description="Generate PyTorch/ONNX warmup and CUDA Event benchmark code",
+            name="Wrapper Gen",
+            description="PyTorch warmup & benchmark code",
+            icon="terminal",
         )
 
     def execute(

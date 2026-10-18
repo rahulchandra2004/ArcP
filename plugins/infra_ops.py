@@ -41,23 +41,27 @@ class InfraOpsPlugin(RadialAction):
     def _init_slices(self) -> None:
         self.slices[1] = SliceConfig(
             slice_id=1,
-            name="Cloud & Container Audit",
-            description="Audit root execution, :latest tags, exposed ports, and privileged caps",
+            name="Container Audit",
+            description="Audit root, ports & capabilities",
+            icon="shield",
         )
         self.slices[2] = SliceConfig(
             slice_id=2,
-            name="Mermaid Architecture",
-            description="Generate Mermaid.js flowchart of services, dependencies, and networks",
+            name="Architecture Map",
+            description="Mermaid service dependency graph",
+            icon="layers",
         )
         self.slices[3] = SliceConfig(
             slice_id=3,
-            name="K8s Manifest Converter",
-            description="Convert Dockerfile/Compose into Deployment + Service with probes",
+            name="K8s Manifests",
+            description="Convert Compose to Deployments",
+            icon="container",
         )
         self.slices[4] = SliceConfig(
             slice_id=4,
-            name="Env Template Gen",
-            description="Extract ${ENV} and ARG vars into documented .env.example",
+            name="Env Template",
+            description="Extract documented .env.example",
+            icon="terminal",
         )
 
     def execute(

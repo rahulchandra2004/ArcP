@@ -29,23 +29,27 @@ class GitOpsPlugin(RadialAction):
     def _init_slices(self) -> None:
         self.slices[1] = SliceConfig(
             slice_id=1,
-            name="Instant Clipboard Diff",
-            description="Unified diff between dropped file and clipboard text in Markdown",
+            name="Clipboard Diff",
+            description="Unified diff vs clipboard text",
+            icon="diff",
         )
         self.slices[2] = SliceConfig(
             slice_id=2,
             name="Patch Bundler",
-            description="Format changes into a git apply compatible .patch with diffstat",
+            description="Git apply compatible .patch",
+            icon="git_branch",
         )
         self.slices[3] = SliceConfig(
             slice_id=3,
-            name="Semantic Commit Gen",
-            description="AST and delta analysis generating Conventional Commit message",
+            name="Semantic Commit",
+            description="Conventional commit message",
+            icon="commit",
         )
         self.slices[4] = SliceConfig(
             slice_id=4,
-            name="Pre-Commit Gatekeeper",
-            description="Secret scrub + AST syntax verify + debug statement detector",
+            name="Gatekeeper",
+            description="Pre-commit verify & secret scrub",
+            icon="lock",
         )
 
     def execute(

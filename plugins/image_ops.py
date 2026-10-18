@@ -53,8 +53,9 @@ class ImageOpsPlugin(RadialAction):
     def _init_slices(self) -> None:
         self.slices[1] = SliceConfig(
             slice_id=1,
-            name="CV Smart Blur",
+            name="Smart Blur",
             description="Smart PII & face blur (keeps UI sharp)",
+            icon="shield",
             sub_slices=[
                 SubSliceConfig("targeted_pii", "Targeted PII", "Auto-blur emails, tokens, keys & faces only"),
                 SubSliceConfig("faces_only", "Faces Only", "Blur human faces and profile avatars"),
@@ -63,18 +64,21 @@ class ImageOpsPlugin(RadialAction):
         )
         self.slices[2] = SliceConfig(
             slice_id=2,
-            name="Stego/EXIF Nuke",
+            name="EXIF Nuke",
             description="Strip metadata & apply LSB noise perturbation",
+            icon="lock",
         )
         self.slices[3] = SliceConfig(
             slice_id=3,
-            name="OCR / Tensor Extract",
-            description="Extract text or morphological table/tensor summary",
+            name="OCR Extract",
+            description="Extract text or morphological tensor summary",
+            icon="search",
         )
         self.slices[4] = SliceConfig(
             slice_id=4,
             name="WebP Compress",
             description="Ultra-compress or transpile to WebP/Data URI",
+            icon="container",
             sub_slices=[
                 SubSliceConfig("webp_lossless", "WebP Lossless", "Lossless WebP compression"),
                 SubSliceConfig("png_quant", "PNG Quantized", "8-bit adaptive palette quantization"),

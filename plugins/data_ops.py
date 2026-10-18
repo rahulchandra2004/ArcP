@@ -46,22 +46,26 @@ class DataOpsPlugin(RadialAction):
         self.slices[1] = SliceConfig(
             slice_id=1,
             name="Synthetic Twin",
-            description="Generate 100-row statistically identical zero-PII twin",
+            description="Generate 100-row zero-PII twin",
+            icon="sparkle",
         )
         self.slices[2] = SliceConfig(
             slice_id=2,
             name="PII Masking",
-            description="Deterministic salted SHA-256 hash preserving join integrity",
+            description="Salted SHA-256 hash masking",
+            icon="shield",
         )
         self.slices[3] = SliceConfig(
             slice_id=3,
-            name="Instant EDA Profile",
-            description="Interactive dark-mode self-contained HTML EDA report",
+            name="Instant EDA",
+            description="Self-contained HTML EDA report",
+            icon="zap",
         )
         self.slices[4] = SliceConfig(
             slice_id=4,
             name="Format Transpile",
-            description="Transpile to JSON Records, SQLite DDL, or Markdown Table",
+            description="JSON, SQLite DDL & Markdown",
+            icon="database",
             sub_slices=[
                 SubSliceConfig("json_records", "JSON Records", "JSON array of record dictionaries"),
                 SubSliceConfig("sqlite_ddl", "SQLite DDL + INSERTs", "SQL DDL schema and insert statements"),

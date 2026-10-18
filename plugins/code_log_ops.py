@@ -28,12 +28,14 @@ class CodeLogOpsPlugin(RadialAction):
         self.slices[1] = SliceConfig(
             slice_id=1,
             name="Secret Scrub",
-            description="Scrub API keys, JWTs & secrets to RAM",
+            description="Scrub API keys & secrets to RAM",
+            icon="shield",
         )
         self.slices[2] = SliceConfig(
             slice_id=2,
-            name="Re-Hydrate / Triage",
-            description="Restore secrets or triage crash logs",
+            name="Crash Triage",
+            description="Restore tokens & triage crash logs",
+            icon="search",
             sub_slices=[
                 SubSliceConfig("rehydrate", "Re-Hydrate Tokens", "Scan and replace <ARCP_*> placeholders"),
                 SubSliceConfig("crash_triage", "Crash Triage", "Deduplicate logs & extract root stack trace"),
@@ -41,8 +43,9 @@ class CodeLogOpsPlugin(RadialAction):
         )
         self.slices[3] = SliceConfig(
             slice_id=3,
-            name="Schema / Type Gen",
-            description="JSON/AST to Pydantic, TS, or C++",
+            name="Type Generator",
+            description="JSON/AST to Pydantic, TS or C++",
+            icon="sparkle",
             sub_slices=[
                 SubSliceConfig("cpp20", "C++20 Struct", "Generate C++20 typed struct definitions"),
                 SubSliceConfig("typescript", "TypeScript Interface", "Generate TS interface types"),
@@ -53,6 +56,7 @@ class CodeLogOpsPlugin(RadialAction):
             slice_id=4,
             name="Auto-Dockerize",
             description="Multi-stage hardened Dockerfile",
+            icon="container",
         )
 
     def execute(
