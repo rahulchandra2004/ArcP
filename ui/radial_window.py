@@ -27,12 +27,14 @@ from PyQt6.QtGui import (
     QDropEvent,
     QFont,
     QIcon,
+    QKeyEvent,
     QMouseEvent,
     QPaintEvent,
     QPainter,
     QPainterPath,
     QPen,
     QPixmap,
+    QWheelEvent,
 )
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
@@ -47,6 +49,16 @@ def create_arcp_icon() -> QIcon:
 from core.clipboard_pipe import ClipboardPipe, ClipboardStreamReport
 from core.gravity_well import GravityWell
 from core.mime_router import MimeMode, MimeRouter
+
+ORDERED_MODES = [
+    MimeMode.IMAGE,
+    MimeMode.DATASET,
+    MimeMode.CODE_LOG,
+    MimeMode.ML_MODEL,
+    MimeMode.INFRA,
+    MimeMode.BINARY,
+    MimeMode.GIT_PATCH,
+]
 from core.telemetry import TelemetryTracker
 from core.token_vault import TokenVault
 from core.worker_pool import WorkerPool
@@ -382,8 +394,8 @@ class RadialWindow(QWidget):
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.RightButton:
-            # Right click collapses HUD
-            self.collapse_to_seed()
+            # Show context menu with mode selection and actions
+            self._show_context_menu(event.globalPosition().toPoint())
             return
 
         if self.is_collapsed:
@@ -391,7 +403,7 @@ class RadialWindow(QWidget):
             self.expand_hud(self.mapToGlobal(event.position().toPoint()))
             return
 
-        # Check click on slices
+        # Check click on slices or core
         if self.hovered_zone == "GRAVITY_WELL":
             if not self.gravity_well.is_empty:
                 cleared = self.gravity_well.clear()
@@ -399,8 +411,100 @@ class RadialWindow(QWidget):
                 self.show_toast(f"Cleared {cleared} queued items")
                 self.update()
             else:
-                self.collapse_to_seed()
+                # Cycle mode on center core click
+                idx = ORDERED_MODES.index(self.active_mode) if self.active_mode in ORDERED_MODES else 0
+                new_mode = ORDERED_MODES[(idx + 1) % len(ORDERED_MODES)]
+                self.set_active_mode(new_mode)
+                plugin = self.plugins.get(new_mode)
+                name = plugin.name if plugin else new_mode.value
+                self.show_toast(f"Mode: {new_mode.value} • {name}", icon_name="sparkle")
             return
+
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        """Cycle polymorphic modes with mouse scroll wheel."""
+        delta = event.angleDelta().y()
+        if delta == 0:
+            delta = event.angleDelta().x()
+        idx = ORDERED_MODES.index(self.active_mode) if self.active_mode in ORDERED_MODES else 0
+        if delta > 0:
+            new_mode = ORDERED_MODES[(idx - 1) % len(ORDERED_MODES)]
+        else:
+            new_mode = ORDERED_MODES[(idx + 1) % len(ORDERED_MODES)]
+        self.set_active_mode(new_mode)
+        plugin = self.plugins.get(new_mode)
+        name = plugin.name if plugin else new_mode.value
+        self.show_toast(f"Mode: {new_mode.value} • {name}", icon_name="sparkle")
+        event.accept()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Switch modes with number keys 1-7, Tab, or close with Escape."""
+        key = event.key()
+        if key == Qt.Key.Key_Tab:
+            idx = ORDERED_MODES.index(self.active_mode) if self.active_mode in ORDERED_MODES else 0
+            new_mode = ORDERED_MODES[(idx + 1) % len(ORDERED_MODES)]
+            self.set_active_mode(new_mode)
+            self.show_toast(f"Mode: {new_mode.value}", icon_name="sparkle")
+        elif Qt.Key.Key_1 <= key <= Qt.Key.Key_7:
+            idx = key - Qt.Key.Key_1
+            if 0 <= idx < len(ORDERED_MODES):
+                self.set_active_mode(ORDERED_MODES[idx])
+                self.show_toast(f"Mode: {ORDERED_MODES[idx].value}", icon_name="sparkle")
+        elif key == Qt.Key.Key_Escape:
+            self.collapse_to_seed()
+        else:
+            super().keyPressEvent(event)
+
+    def _show_context_menu(self, global_pos: QPoint) -> None:
+        """Sleek Cyberpunk Context Menu with instant mode switching."""
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #0F172A;
+                color: #F8FAFC;
+                border: 1px solid #00F5D4;
+                border-radius: 6px;
+                padding: 4px;
+                font-family: 'Segoe UI';
+                font-size: 12px;
+            }
+            QMenu::item {
+                padding: 6px 20px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #1E293B;
+                color: #00F5D4;
+            }
+            QMenu::separator {
+                height: 1px;
+                background-color: #334155;
+                margin: 4px 8px;
+            }
+        """)
+
+        mode_options = [
+            (MimeMode.IMAGE, "Image Ops (JPG, PNG, WebP, OCR)"),
+            (MimeMode.DATASET, "Dataset Ops (CSV, Parquet, SQL)"),
+            (MimeMode.CODE_LOG, "Code & Log Ops (Secrets, Docker)"),
+            (MimeMode.ML_MODEL, "ML Model Ops (ONNX, Tensors)"),
+            (MimeMode.INFRA, "Infra Ops (Docker, K8s, Terraform)"),
+            (MimeMode.BINARY, "Binary Ops (ELF, PE, Hex X-Ray)"),
+            (MimeMode.GIT_PATCH, "Git Patch Ops (Diffs, Commits)"),
+        ]
+
+        for mode, title in mode_options:
+            prefix = "[Active] " if mode == self.active_mode else "         "
+            action = menu.addAction(f"{prefix}{title}")
+            action.triggered.connect(lambda checked, m=mode: self.set_active_mode(m))
+
+        menu.addSeparator()
+        collapse_action = menu.addAction("Minimize to Floating Seed")
+        collapse_action.triggered.connect(self.collapse_to_seed)
+
+        close_action = menu.addAction("Exit ArcP")
+        close_action.triggered.connect(QApplication.instance().quit)
+
+        menu.exec(global_pos)
 
         if self.hovered_slice_id in (1, 2, 3, 4):
             slice_id = self.hovered_slice_id
