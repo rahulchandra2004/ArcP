@@ -52,11 +52,22 @@ jobs:
         run: |
           git config user.name "Rahul Chandra Padamuttam"
           git config user.email "195073878+rahulchandra2004@users.noreply.github.com"
+          git config rebase.committerDateIsAuthorDate true
 
       - name: Execute Telemetry & Jittered Commits
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
+          # Helper to forward --committer-date-is-author-date during git pull --rebase
+          git() {
+            if [ "$1" = "pull" ] && [[ "$*" == *"--committer-date-is-author-date"* ]]; then
+              command git config rebase.committerDateIsAuthorDate true
+              command git fetch origin main && command git rebase --committer-date-is-author-date origin/main
+            else
+              command git "$@"
+            fi
+          }
+
           # 0) Ensure local repo is synced with remote before generating jittered commits
           git pull --rebase origin main
 
