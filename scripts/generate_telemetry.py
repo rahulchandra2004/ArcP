@@ -84,6 +84,8 @@ def run_pytest_suite(repo_root: Path) -> Tuple[int, int, float, bool]:
         total_count = 31
 
     success = (result.returncode == 0) and (failed_count == 0) and (error_count == 0)
+    if not success:
+        sys.stderr.write(f"\n[CI PYTEST REPORT]\n{output}\n")
     return passed_count, total_count, elapsed_ms, success
 
 

@@ -46,7 +46,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest PyQt6 Pillow numpy pandas psutil pyyaml pydantic
+          pip install pytest PyQt6 PyQt6-Svg opencv-python-headless Pillow numpy pandas psutil pyyaml pydantic
 
       - name: Configure Git Identity
         run: |
