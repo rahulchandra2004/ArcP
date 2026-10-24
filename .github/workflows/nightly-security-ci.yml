@@ -57,6 +57,9 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
+          # 0) Ensure local repo is synced with remote before generating jittered commits
+          git pull --rebase origin main
+
           # 1) Generate random time jitter (up to 7 hours / 25200 seconds)
           CURRENT_EPOCH=$(date +%s)
           OFFSET_SEC=$(( RANDOM % 25200 ))
@@ -82,8 +85,8 @@ jobs:
           python scripts/generate_telemetry.py --mode signatures --timestamp "$COMMIT_DATE"
           git add security_signatures.json
           if ! git diff --cached --quiet; then
-            GIT_AUTHOR_DATE="$COMMIT_DATE" GIT_COMMITTER_DATE="$COMMIT_DATE" git commit -m "$SIG_MSG"
-            echo "Successfully committed security signatures: $SIG_MSG"
+            GIT_AUTHOR_DATE="$COMMIT_DATE" GIT_COMMITTER_DATE="$COMMIT_DATE" git commit -m "$SIG_MSG [skip ci]"
+            echo "Successfully committed security signatures: $SIG_MSG [skip ci]"
           fi
 
           # 4) Randomly decide (~66% chance) to trigger a 2nd commit 18 to 95 minutes later
@@ -116,11 +119,11 @@ jobs:
 
             git add docs/NIGHTLY_TELEMETRY.md
             if ! git diff --cached --quiet; then
-              GIT_AUTHOR_DATE="$COMMIT_DATE_2" GIT_COMMITTER_DATE="$COMMIT_DATE_2" git commit -m "$FULL_BENCH_MSG"
-              echo "Successfully committed benchmark telemetry: $FULL_BENCH_MSG"
+              GIT_AUTHOR_DATE="$COMMIT_DATE_2" GIT_COMMITTER_DATE="$COMMIT_DATE_2" git commit -m "$FULL_BENCH_MSG [skip ci]"
+              echo "Successfully committed benchmark telemetry: $FULL_BENCH_MSG [skip ci]"
             fi
           fi
 
-          # 6) Push all commits to origin main
-          git pull --rebase origin main
+          # 6) Push all commits to origin main while preserving committer dates
+          git pull --rebase --committer-date-is-author-date origin main
           git push origin main
