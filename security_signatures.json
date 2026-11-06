@@ -1,16 +1,16 @@
 {
   "version": "1.1.0.0",
-  "timestamp": "2026-11-05T17:05:18Z",
+  "timestamp": "2026-11-06T11:41:36Z",
   "pipeline_status": "SECURE",
   "regression_suite": {
     "passed": 31,
     "total": 31,
-    "duration_ms": 1032.65,
+    "duration_ms": 1438.29,
     "status": "PASS"
   },
   "submillisecond_benchmarks": {
     "token_vault_entropy_latency_ms": 0.0048,
-    "mime_router_sniffing_latency_ms": 0.0027,
+    "mime_router_sniffing_latency_ms": 0.0026,
     "entropy_sla_ms": 1.0,
     "mime_sla_ms": 10.0,
     "compliance": "SLA_SATISFIED"
