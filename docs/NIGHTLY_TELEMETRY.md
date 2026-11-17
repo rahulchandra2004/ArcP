@@ -10,7 +10,7 @@ This telemetry document is automatically published by the **ArcP Nightly Securit
 ---
 
 ### Environment & Run Metadata
-* **Execution Timestamp:** `2026-11-16T11:55:45Z`
+* **Execution Timestamp:** `2026-11-17T13:23:24Z`
 * **Host Operating System:** `Linux 7.0.0-1019-azure`
 * **Python Runtime:** `Python 3.11.18`
 * **Execution Engine:** Headless Offscreen Pipeline (`QT_QPA_PLATFORM=offscreen`)
@@ -21,15 +21,15 @@ This telemetry document is automatically published by the **ArcP Nightly Securit
 ### Sub-Millisecond Latency Benchmarks
 | Component | Metric | Mean Latency | Throughput | SLA Threshold | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **TokenVault Shannon Entropy** | In-Memory Secret Detection | `0.0058 ms` | ~`173,381 ops/s` | `< 1.0000 ms` | **PASSED** |
-| **MimeRouter Header Sniffer** | Polymorphic Magic Byte Check | `0.0030 ms` | ~`331,467 ops/s` | `< 10.0000 ms` | **PASSED** |
+| **TokenVault Shannon Entropy** | In-Memory Secret Detection | `0.0062 ms` | ~`161,197 ops/s` | `< 1.0000 ms` | **PASSED** |
+| **MimeRouter Header Sniffer** | Polymorphic Magic Byte Check | `0.0035 ms` | ~`286,335 ops/s` | `< 10.0000 ms` | **PASSED** |
 
 ---
 
 ### Test Regression Suite
 * **Suite File:** `tests/test_pipeline.py`
 * **Test Results:** **`31 / 31` Passed** (100% compliance)
-* **Suite Execution Time:** `882.22 ms` (`0.88s`)
+* **Suite Execution Time:** `848.92 ms` (`0.85s`)
 * **Zero-Disk Pipeline:** All test artifacts, token dehydration vaults, and clipboard events executed entirely in-memory.
 
 ---
